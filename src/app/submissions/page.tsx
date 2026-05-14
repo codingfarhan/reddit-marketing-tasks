@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises"
 import { getSubmissionsFileLabel, getSubmissionsFilePath } from "@/lib/submissions-storage"
+import { redditTasks } from "@/lib/tasks"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -36,17 +37,7 @@ async function readSubmissionMetas(): Promise<SubmissionMeta[]> {
 export default async function SubmissionsPage() {
   const metas = await readSubmissionMetas()
   const submissionsFileLabel = getSubmissionsFileLabel()
-
-  const rows = metas.flatMap((m) =>
-    (m.tasks ?? []).map((t) => ({
-      submissionId: m.submissionId,
-      submittedAt: m.submittedAt,
-      name: m.name,
-      redditUsername: m.redditUsername,
-      taskId: t.taskId,
-      commentUrl: t.commentUrl,
-    })),
-  )
+  const commentUrlCount = metas.reduce((total, meta) => total + (meta.tasks?.length ?? 0), 0)
 
   return (
     <div className="min-h-dvh bg-zinc-50 text-zinc-950">
@@ -61,55 +52,67 @@ export default async function SubmissionsPage() {
             <div>
               <p className="text-sm font-semibold">Comment URLs</p>
               <p className="text-xs text-zinc-600">
-                {metas.length} submission{metas.length === 1 ? "" : "s"} • {rows.length} comment URL
-                {rows.length === 1 ? "" : "s"}
+                {metas.length} submission{metas.length === 1 ? "" : "s"} • {commentUrlCount} comment URL
+                {commentUrlCount === 1 ? "" : "s"}
               </p>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-[900px] w-full text-left text-sm">
+            <table className="min-w-[2600px] w-full text-left text-sm">
               <thead className="bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-600">
                 <tr>
                   <th className="px-4 py-3">Submitted</th>
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Reddit</th>
-                  <th className="px-4 py-3">Task</th>
-                  <th className="px-4 py-3">Comment URL</th>
+                  {redditTasks.map((task) => (
+                    <th key={task.id} className="px-4 py-3">
+                      {task.title}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200">
-                {rows.length === 0 ? (
+                {metas.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={5}>
+                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={3 + redditTasks.length}>
                       No submissions found yet.
                     </td>
                   </tr>
                 ) : (
-                  rows.map((r) => (
-                    <tr key={`${r.submissionId}:${r.taskId}`} className="hover:bg-zinc-50/60">
+                  metas.map((submission) => {
+                    const commentByTaskId = new Map((submission.tasks ?? []).map((task) => [task.taskId, task.commentUrl]))
+
+                    return (
+                    <tr key={submission.submissionId} className="hover:bg-zinc-50/60">
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-zinc-600">
-                        {new Date(r.submittedAt).toLocaleString()}
+                        {new Date(submission.submittedAt).toLocaleString()}
                       </td>
-                      <td className="px-4 py-3 font-medium">{r.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{r.redditUsername}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{r.taskId}</td>
-                      <td className="px-4 py-3 font-mono text-xs text-zinc-700 break-all">
-                        {r.commentUrl.startsWith("http") ? (
-                          <a
-                            className="underline decoration-zinc-300 underline-offset-4 hover:decoration-zinc-900"
-                            href={r.commentUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                          >
-                            {r.commentUrl}
-                          </a>
-                        ) : (
-                          r.commentUrl
-                        )}
-                      </td>
+                      <td className="px-4 py-3 font-medium">{submission.name}</td>
+                      <td className="px-4 py-3 font-mono text-xs">{submission.redditUsername}</td>
+                      {redditTasks.map((task) => {
+                        const commentUrl = commentByTaskId.get(task.id) ?? ""
+
+                        return (
+                          <td key={task.id} className="px-4 py-3 font-mono text-xs text-zinc-700 break-all">
+                            {commentUrl.startsWith("http") ? (
+                              <a
+                                className="underline decoration-zinc-300 underline-offset-4 hover:decoration-zinc-900"
+                                href={commentUrl}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                {commentUrl}
+                              </a>
+                            ) : (
+                              <span className="text-zinc-400">-</span>
+                            )}
+                          </td>
+                        )
+                      })}
                     </tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>
