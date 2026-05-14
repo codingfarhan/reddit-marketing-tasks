@@ -1,50 +1,38 @@
-import { readFile } from "node:fs/promises"
-import { getSubmissionsFileLabel, getSubmissionsFilePath } from "@/lib/submissions-storage"
-import { redditTasks } from "@/lib/tasks"
+import { readAdminConfig } from "@/lib/admin-storage"
+import { readSubmissions, type SavedSubmission } from "@/lib/submissions-db"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-type MetaTask = {
-  taskId: string
-  redditUrl: string
-  exampleComment: string
-  generatedComment: string | null
-  commentUrl: string
-}
-
-type SubmissionMeta = {
-  submissionId: string
-  submittedAt: string
-  name: string
-  redditUsername: string
-  tasks: MetaTask[]
-}
-
-const submissionsFile = getSubmissionsFilePath()
-
-async function readSubmissionMetas(): Promise<SubmissionMeta[]> {
-  try {
-    const raw = await readFile(submissionsFile, "utf8")
-    const parsed = JSON.parse(raw) as unknown
-    if (!Array.isArray(parsed)) return []
-    return (parsed as SubmissionMeta[]).sort((a, b) => (a.submittedAt < b.submittedAt ? 1 : -1))
-  } catch {
-    return []
-  }
-}
-
 export default async function SubmissionsPage() {
-  const metas = await readSubmissionMetas()
-  const submissionsFileLabel = getSubmissionsFileLabel()
-  const commentUrlCount = metas.reduce((total, meta) => total + (meta.tasks?.length ?? 0), 0)
+  const [metas, adminConfig] = await Promise.all([readSubmissions(), readAdminConfig()])
+  const latestByName = new Map<string, SavedSubmission>()
+  for (const meta of metas) {
+    const key = meta.personaId || meta.name.toLowerCase()
+    const existing = latestByName.get(key)
+    if (!existing || existing.submittedAt < meta.submittedAt) latestByName.set(key, meta)
+  }
+  const rows = Array.from(latestByName.values()).sort((a, b) => (a.submittedAt < b.submittedAt ? 1 : -1))
+  const commentUrlCount = rows.reduce((total, meta) => total + (meta.tasks?.length ?? 0), 0)
+  const adminColumns = adminConfig.tasks.map((task, index) => ({
+    id: task.id,
+    label: `Task ${index + 1}`,
+  }))
+  const savedTaskIds = Array.from(new Set(rows.flatMap((row) => row.tasks.map((task) => task.taskId))))
+  const taskColumns =
+    adminColumns.length > 0
+      ? adminColumns
+      : savedTaskIds.map((taskId, index) => ({
+          id: taskId,
+          label: `Task ${index + 1}`,
+        }))
 
   return (
     <div className="min-h-dvh bg-zinc-50 text-zinc-950">
       <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h1 className="text-lg font-semibold tracking-tight">Submissions</h1>
-          <p className="mt-1 text-sm text-zinc-600">Reading from {submissionsFileLabel}.</p>
+            <p className="mt-1 text-sm text-zinc-600">Reading submissions from the database.</p>
         </div>
 
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white shadow-sm">
@@ -52,35 +40,35 @@ export default async function SubmissionsPage() {
             <div>
               <p className="text-sm font-semibold">Comment URLs</p>
               <p className="text-xs text-zinc-600">
-                {metas.length} submission{metas.length === 1 ? "" : "s"} • {commentUrlCount} comment URL
+                {rows.length} name{rows.length === 1 ? "" : "s"} • {commentUrlCount} comment URL
                 {commentUrlCount === 1 ? "" : "s"}
               </p>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-[2600px] w-full text-left text-sm">
+            <table className="min-w-[1200px] w-full text-left text-sm">
               <thead className="bg-zinc-50 text-xs font-semibold uppercase tracking-wide text-zinc-600">
                 <tr>
                   <th className="px-4 py-3">Submitted</th>
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Reddit</th>
-                  {redditTasks.map((task) => (
+                  {taskColumns.map((task) => (
                     <th key={task.id} className="px-4 py-3">
-                      {task.title}
+                      {task.label}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200">
-                {metas.length === 0 ? (
+                {rows.length === 0 ? (
                   <tr>
-                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={3 + redditTasks.length}>
+                    <td className="px-4 py-6 text-sm text-zinc-600" colSpan={3 + taskColumns.length}>
                       No submissions found yet.
                     </td>
                   </tr>
                 ) : (
-                  metas.map((submission) => {
+                  rows.map((submission) => {
                     const commentByTaskId = new Map((submission.tasks ?? []).map((task) => [task.taskId, task.commentUrl]))
 
                     return (
@@ -90,7 +78,7 @@ export default async function SubmissionsPage() {
                       </td>
                       <td className="px-4 py-3 font-medium">{submission.name}</td>
                       <td className="px-4 py-3 font-mono text-xs">{submission.redditUsername}</td>
-                      {redditTasks.map((task) => {
+                      {taskColumns.map((task) => {
                         const commentUrl = commentByTaskId.get(task.id) ?? ""
 
                         return (

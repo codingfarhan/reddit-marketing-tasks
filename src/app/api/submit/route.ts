@@ -1,7 +1,6 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises"
-import path from "node:path"
-import { getSubmissionsFilePath } from "@/lib/submissions-storage"
-import { redditTasks } from "@/lib/tasks"
+import { readAdminConfig } from "@/lib/admin-storage"
+import { commentPersonas } from "@/lib/personas"
+import { saveSubmission } from "@/lib/submissions-db"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -9,7 +8,7 @@ export const dynamic = "force-dynamic"
 type SavedTask = {
   taskId: string
   redditUrl: string
-  exampleComment: string
+  postText: string
   generatedComment: string | null
   commentUrl: string
 }
@@ -17,6 +16,7 @@ type SavedTask = {
 type Body = {
   submissionId?: string
   name?: string
+  personaId?: string
   redditUsername?: string
   tasks?: Array<{
     taskId?: string
@@ -29,11 +29,10 @@ type SubmissionMeta = {
   submissionId: string
   submittedAt: string
   name: string
+  personaId: string
   redditUsername: string
   tasks: SavedTask[]
 }
-
-const submissionsFile = getSubmissionsFilePath()
 
 function isValidHttpUrl(value: string) {
   try {
@@ -49,17 +48,33 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Body
     const submissionId = String(body.submissionId ?? "").trim()
     const name = String(body.name ?? "").trim()
+    const personaId = String(body.personaId ?? "").trim()
     const redditUsername = String(body.redditUsername ?? "").trim()
 
     if (!submissionId) return Response.json({ error: "Missing submissionId" }, { status: 400 })
     if (!name) return Response.json({ error: "Missing name" }, { status: 400 })
+    if (!personaId) return Response.json({ error: "Missing personaId" }, { status: 400 })
     if (!redditUsername) return Response.json({ error: "Missing redditUsername" }, { status: 400 })
+
+    const persona = commentPersonas.find((item) => item.id === personaId && item.name === name)
+    if (!persona) return Response.json({ error: "Select a valid name from the dropdown" }, { status: 400 })
+
+    const config = await readAdminConfig()
+    const configuredTasks = config.tasks
+    const hasValidSetup =
+      configuredTasks.length > 0 &&
+      configuredTasks.every((task) => task.id && task.redditUrl.trim() && task.postText.trim() && isValidHttpUrl(task.redditUrl)) &&
+      config.generatedTaskComments.length === configuredTasks.length
+
+    if (!hasValidSetup) {
+      return Response.json({ error: "Admin setup is incomplete. Add tasks and generate comments first." }, { status: 400 })
+    }
 
     const now = new Date()
     const taskInputs = Array.isArray(body.tasks) ? body.tasks : []
     const inputByTaskId = new Map(taskInputs.map((task) => [String(task.taskId ?? ""), task] as const))
 
-    const savedTasks: SavedTask[] = redditTasks.map((task) => {
+    const savedTasks: SavedTask[] = configuredTasks.map((task) => {
       const input = inputByTaskId.get(task.id)
       const commentUrl = String(input?.commentUrl ?? "").trim()
       const generatedComment = typeof input?.generatedComment === "string" && input.generatedComment.trim() ? input.generatedComment.trim() : null
@@ -67,7 +82,7 @@ export async function POST(request: Request) {
       return {
         taskId: task.id,
         redditUrl: task.redditUrl,
-        exampleComment: task.exampleComment,
+        postText: task.postText,
         generatedComment,
         commentUrl,
       }
@@ -87,23 +102,12 @@ export async function POST(request: Request) {
       submissionId,
       submittedAt: now.toISOString(),
       name,
+      personaId,
       redditUsername,
       tasks: savedTasks,
     }
 
-    await mkdir(path.dirname(submissionsFile), { recursive: true })
-
-    let existing: SubmissionMeta[] = []
-    try {
-      const raw = await readFile(submissionsFile, "utf8")
-      const parsed = JSON.parse(raw) as unknown
-      existing = Array.isArray(parsed) ? (parsed as SubmissionMeta[]) : []
-    } catch {
-      existing = []
-    }
-
-    const withoutCurrent = existing.filter((submission) => submission.submissionId !== submissionId)
-    await writeFile(submissionsFile, JSON.stringify([meta, ...withoutCurrent], null, 2), "utf8")
+    await saveSubmission(meta)
 
     return Response.json({ ok: true, submissionId })
   } catch (err) {

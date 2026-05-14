@@ -1,0 +1,1 @@
+ALTER TABLE "AdminTask" ADD COLUMN "isActive" BOOLEAN NOT NULL DEFAULT true;

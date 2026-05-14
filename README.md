@@ -8,6 +8,7 @@ Create `.env.local`:
 
 ```bash
 OPENAI_API_KEY=your_key_here
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=require
 # Optional
 OPENAI_MODEL=gpt-4.1-mini
 ```
@@ -28,9 +29,21 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-Edit tasks here: `src/lib/tasks.ts`
+Manage tasks and generate persona comments at `/admin`.
 
-Submissions are saved in one JSON file. Locally this is `storage/submissions.json` (ignored by git). On Vercel this uses `/tmp/reddit-marketing-tasks/submissions.json`, which is writable but ephemeral.
+Generated persona comments, admin tasks, and user submissions are stored in Postgres through Prisma. On Vercel, create a standard Postgres database from the Vercel Marketplace, for example Neon Postgres, connect it to this project so `DATABASE_URL` is available, then run:
+
+```bash
+npm run db:migrate
+```
+
+Useful database commands:
+
+```bash
+npm run db:migrate
+npm run db:push
+npm run db:studio
+```
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

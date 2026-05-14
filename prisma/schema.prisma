@@ -1,0 +1,61 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model AdminTask {
+  id                String              @id
+  redditUrl         String
+  postText          String              @db.Text
+  sortOrder         Int                 @unique
+  isActive          Boolean             @default(true)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  generatedComments GeneratedComment[]
+  submissionTasks   SubmissionTask[]
+}
+
+model GeneratedComment {
+  id          String    @id @default(cuid())
+  taskId      String
+  personaId   String
+  personaName String
+  comment     String    @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  task        AdminTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, personaId])
+  @@index([personaId])
+}
+
+model Submission {
+  id             String           @id
+  submittedAt    DateTime         @default(now())
+  name           String
+  personaId      String
+  redditUsername String
+  tasks          SubmissionTask[]
+
+  @@index([personaId])
+  @@index([submittedAt])
+}
+
+model SubmissionTask {
+  id               String     @id @default(cuid())
+  submissionId     String
+  taskId           String
+  redditUrl        String
+  postText         String     @db.Text
+  generatedComment String?    @db.Text
+  commentUrl       String     @db.Text
+  sortOrder        Int
+  submission       Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  task             AdminTask  @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@unique([submissionId, taskId])
+  @@index([taskId])
+}
