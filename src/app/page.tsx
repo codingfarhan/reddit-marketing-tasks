@@ -401,12 +401,12 @@ export default function Home() {
                 />
               </div>
 
-                <div className="mt-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-sm font-semibold">Screenshot</p>
-                      <p className="text-xs text-zinc-600">PNG/JPG/WebP • up to 4MB</p>
-                    </div>
+              <div className="mt-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">Screenshot</p>
+                    <p className="text-xs text-zinc-600">PNG/JPG/WebP • up to 4MB</p>
+                  </div>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -476,10 +476,6 @@ export default function Home() {
             </section>
           )}
         </div>
-
-        <footer className="mt-4 text-center text-xs text-zinc-500">
-          Screenshots are stored in <span className="font-mono">storage/submissions</span> (dev).
-        </footer>
       </main>
     </div>
   )
