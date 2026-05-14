@@ -11,6 +11,7 @@ type SelectedShot = {
   previewUrl: string
   blobUrl: string | null
   blobPathname: string | null
+  uploadPathname: string | null
   isUploading: boolean
   isProcessing: boolean
   error: string | null
@@ -91,6 +92,7 @@ export default function Home() {
   }
 
   async function prepareScreenshot(file: File) {
+    if (!file.type.startsWith("image/")) return file
     if (file.type === "image/jpeg" && file.size <= 3_500_000) return file
 
     const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -130,13 +132,33 @@ export default function Home() {
     return new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: "image/jpeg" })
   }
 
+  function getExtensionFromFilename(name: string) {
+    const ext = name.split(".").pop()
+    if (!ext || ext.length > 8) return ""
+    return `.${ext.toLowerCase()}`
+  }
+
+  function pickExtension(file: File) {
+    if (file.type === "application/pdf") return ".pdf"
+    if (file.type === "text/plain") return ".txt"
+    if (file.type === "application/msword") return ".doc"
+    if (file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") return ".docx"
+    if (file.type === "application/vnd.ms-excel") return ".xls"
+    if (file.type === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") return ".xlsx"
+    if (file.type === "application/vnd.ms-powerpoint") return ".ppt"
+    if (file.type === "application/vnd.openxmlformats-officedocument.presentationml.presentation") return ".pptx"
+    if (file.type.startsWith("image/")) return ".jpg"
+    return getExtensionFromFilename(file.name) || ""
+  }
+
   async function uploadScreenshotToBlob(taskId: string, file: File, sid: string) {
-    const pathname = `submissions/${sid}/screenshots/${taskId}.jpg`
+    const ext = pickExtension(file)
+    const pathname = `submissions/${sid}/screenshots/${taskId}${ext || ""}`
 
     const tokenRes = await fetch("/api/blob-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pathname }),
+      body: JSON.stringify({ pathname, contentType: file.type }),
     })
     const tokenData = (await tokenRes.json()) as { token?: string; error?: string }
     if (!tokenRes.ok || !tokenData.token) throw new Error(tokenData.error || "Failed to get upload token")
@@ -287,8 +309,20 @@ export default function Home() {
   async function onPickScreenshot(taskId: string, file: File | null) {
     setSubmitError(null)
     if (!file) return
-    if (!file.type.startsWith("image/")) {
-      setSubmitError("Please upload an image file (PNG/JPG/WebP).")
+    const allowed =
+      file.type.startsWith("image/") ||
+      [
+        "application/pdf",
+        "text/plain",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      ].includes(file.type)
+    if (!allowed) {
+      setSubmitError("Unsupported file type. Please upload an image or a document (PDF/DOCX/XLSX/PPTX/TXT).")
       return
     }
     const maxBytes = 25 * 1024 * 1024
@@ -309,17 +343,17 @@ export default function Home() {
       if (existing) URL.revokeObjectURL(existing.previewUrl)
       return {
         ...prev,
-        [taskId]: { file, previewUrl, blobUrl: null, blobPathname: null, isUploading: false, isProcessing: true, error: null },
+        [taskId]: { file, previewUrl, blobUrl: null, blobPathname: null, uploadPathname: null, isUploading: false, isProcessing: true, error: null },
       }
     })
 
     try {
       const processed = await prepareScreenshot(file)
-      const processedPreview = URL.createObjectURL(processed)
+      const processedPreview = processed.type.startsWith("image/") ? URL.createObjectURL(processed) : previewUrl
       setShotsByTaskId((prev) => {
         const existing = prev[taskId]
         if (!existing) return prev
-        URL.revokeObjectURL(existing.previewUrl)
+        if (processedPreview !== existing.previewUrl) URL.revokeObjectURL(existing.previewUrl)
         return {
           ...prev,
           [taskId]: { ...existing, file: processed, previewUrl: processedPreview, isProcessing: false, isUploading: true, error: null },
@@ -333,7 +367,7 @@ export default function Home() {
         if (!existing) return prev
         return {
           ...prev,
-          [taskId]: { ...existing, blobUrl: uploaded.url, blobPathname: uploaded.pathname, isUploading: false, error: null },
+          [taskId]: { ...existing, blobUrl: uploaded.url, blobPathname: uploaded.pathname, uploadPathname: uploaded.pathname, isUploading: false, error: null },
         }
       })
     } catch (e) {
@@ -582,7 +616,7 @@ export default function Home() {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept="image/*,.pdf,.txt,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
                     capture="environment"
                     onChange={(e) => onPickScreenshot(activeTask.id, e.target.files?.[0] ?? null)}
                     className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-zinc-800 sm:w-auto"

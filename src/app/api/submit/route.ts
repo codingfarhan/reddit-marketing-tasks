@@ -76,7 +76,7 @@ export async function POST(request: Request) {
         exampleComment: task.exampleComment,
         generatedComment,
         originalName,
-        storedPath: `screenshots/${task.id}.jpg`,
+        storedPath: blobPathname ?? `submissions/${submissionId}/screenshots/${task.id}`,
         blobUrl,
         blobPathname,
         size,
