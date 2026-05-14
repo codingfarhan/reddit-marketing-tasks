@@ -36,14 +36,16 @@ export async function POST(request: Request) {
       return Response.json({ error: "Unsupported contentType" }, { status: 400 })
     }
 
-    const token = await generateClientTokenFromReadWriteToken({
+    const tokenOptions = {
       pathname,
       addRandomSuffix: false,
       allowOverwrite: true,
       maximumSizeInBytes: 25 * 1024 * 1024,
-      allowedContentTypes: [...allowedContentTypes, "application/json"],
+      allowedContentTypes: contentType ? [contentType] : undefined,
       validUntil: Date.now() + 360000,
-    })
+    }
+
+    const token = await generateClientTokenFromReadWriteToken(tokenOptions)
 
     return Response.json({ token }, { headers: { "Cache-Control": "no-store, max-age=0" } })
   } catch (err) {
