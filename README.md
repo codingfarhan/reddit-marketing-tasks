@@ -30,7 +30,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 Edit tasks here: `src/lib/tasks.ts`
 
-Submissions are saved locally in `storage/submissions.json` (ignored by git).
+Submissions are saved in one JSON file. Locally this is `storage/submissions.json` (ignored by git). On Vercel this uses `/tmp/reddit-marketing-tasks/submissions.json`, which is writable but ephemeral.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

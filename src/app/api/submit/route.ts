@@ -1,8 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { getSubmissionsFilePath } from "@/lib/submissions-storage"
 import { redditTasks } from "@/lib/tasks"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 type SavedTask = {
   taskId: string
@@ -31,7 +33,7 @@ type SubmissionMeta = {
   tasks: SavedTask[]
 }
 
-const submissionsFile = path.join(process.cwd(), "storage", "submissions.json")
+const submissionsFile = getSubmissionsFilePath()
 
 function isValidHttpUrl(value: string) {
   try {

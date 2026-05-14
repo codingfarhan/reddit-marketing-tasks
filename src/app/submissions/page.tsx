@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises"
-import path from "node:path"
+import { getSubmissionsFileLabel, getSubmissionsFilePath } from "@/lib/submissions-storage"
 
 export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 type MetaTask = {
   taskId: string
@@ -19,7 +20,7 @@ type SubmissionMeta = {
   tasks: MetaTask[]
 }
 
-const submissionsFile = path.join(process.cwd(), "storage", "submissions.json")
+const submissionsFile = getSubmissionsFilePath()
 
 async function readSubmissionMetas(): Promise<SubmissionMeta[]> {
   try {
@@ -34,6 +35,7 @@ async function readSubmissionMetas(): Promise<SubmissionMeta[]> {
 
 export default async function SubmissionsPage() {
   const metas = await readSubmissionMetas()
+  const submissionsFileLabel = getSubmissionsFileLabel()
 
   const rows = metas.flatMap((m) =>
     (m.tasks ?? []).map((t) => ({
@@ -51,7 +53,7 @@ export default async function SubmissionsPage() {
       <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h1 className="text-lg font-semibold tracking-tight">Submissions</h1>
-          <p className="mt-1 text-sm text-zinc-600">Reading from storage/submissions.json.</p>
+          <p className="mt-1 text-sm text-zinc-600">Reading from {submissionsFileLabel}.</p>
         </div>
 
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white shadow-sm">
