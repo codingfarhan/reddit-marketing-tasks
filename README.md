@@ -2,6 +2,21 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### 1) Set env vars
+
+Create `.env.local`:
+
+```bash
+OPENAI_API_KEY=your_key_here
+# Optional
+OPENAI_MODEL=gpt-4.1-mini
+
+# Required for uploads on Vercel Blob (recommended for production)
+BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
+```
+
+### 2) Run the dev server
+
 First, run the development server:
 
 ```bash
@@ -16,7 +31,9 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Edit tasks here: `src/lib/tasks.ts`
+
+Submissions (screenshots + meta) are saved locally to `storage/submissions/` (ignored by git).
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

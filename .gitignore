@@ -17,6 +17,9 @@
 /.next/
 /out/
 
+# local submission storage (dev only)
+/storage
+
 # production
 /build
 
