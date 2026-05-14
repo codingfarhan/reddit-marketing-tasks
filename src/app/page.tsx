@@ -164,11 +164,12 @@ export default function Home() {
     const tokenData = (await tokenRes.json()) as { token?: string; error?: string }
     if (!tokenRes.ok || !tokenData.token) throw new Error(tokenData.error || "Failed to get upload token")
 
+    const useMultipart = file.size > 8 * 1024 * 1024
     return await blobPut(pathname, file, {
       access: "public",
       token: tokenData.token,
       contentType: file.type || undefined,
-      multipart: true,
+      multipart: useMultipart,
     })
   }
 
