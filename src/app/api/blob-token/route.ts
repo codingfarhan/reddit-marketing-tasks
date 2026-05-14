@@ -1,24 +1,24 @@
-import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client";
+import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client"
 
-export const runtime = "nodejs";
+export const runtime = "nodejs"
+export const dynamic = "force-dynamic"
 
 type Body = {
-  pathname?: string;
-  contentType?: string;
-};
+  pathname?: string
+  contentType?: string
+}
 
 function isAllowedPathname(pathname: string) {
-  return pathname.startsWith("submissions/") && !pathname.includes("..");
+  return pathname.startsWith("submissions/") && !pathname.includes("..")
 }
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Body;
-    const pathname = String(body.pathname ?? "").trim();
-    const contentType = String(body.contentType ?? "").trim();
-    if (!pathname) return Response.json({ error: "Missing pathname" }, { status: 400 });
-    if (!isAllowedPathname(pathname))
-      return Response.json({ error: "Invalid pathname" }, { status: 400 });
+    const body = (await request.json()) as Body
+    const pathname = String(body.pathname ?? "").trim()
+    const contentType = String(body.contentType ?? "").trim()
+    if (!pathname) return Response.json({ error: "Missing pathname" }, { status: 400 })
+    if (!isAllowedPathname(pathname)) return Response.json({ error: "Invalid pathname" }, { status: 400 })
 
     const allowedContentTypes = [
       "image/*",
@@ -30,10 +30,10 @@ export async function POST(request: Request) {
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "application/vnd.ms-powerpoint",
       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ];
+    ]
 
     if (contentType && !allowedContentTypes.some((t) => (t.endsWith("/*") ? contentType.startsWith(t.slice(0, -1)) : t === contentType))) {
-      return Response.json({ error: "Unsupported contentType" }, { status: 400 });
+      return Response.json({ error: "Unsupported contentType" }, { status: 400 })
     }
 
     const token = await generateClientTokenFromReadWriteToken({
@@ -42,15 +42,13 @@ export async function POST(request: Request) {
       allowOverwrite: true,
       maximumSizeInBytes: 25 * 1024 * 1024,
       allowedContentTypes: [...allowedContentTypes, "application/json"],
-    });
+      validUntil: Date.now() + 360000,
+    })
 
-    return Response.json({ token });
+    return Response.json({ token }, { headers: { "Cache-Control": "no-store, max-age=0" } })
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    const status =
-      typeof err === "object" && err !== null && "status" in err && typeof err.status === "number"
-        ? err.status
-        : 500;
-    return Response.json({ error: message }, { status });
+    const message = err instanceof Error ? err.message : "Unknown error"
+    const status = typeof err === "object" && err !== null && "status" in err && typeof err.status === "number" ? err.status : 500
+    return Response.json({ error: message }, { status })
   }
 }

@@ -159,6 +159,7 @@ export default function Home() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ pathname, contentType: file.type }),
+      cache: "no-store",
     })
     const tokenData = (await tokenRes.json()) as { token?: string; error?: string }
     if (!tokenRes.ok || !tokenData.token) throw new Error(tokenData.error || "Failed to get upload token")
