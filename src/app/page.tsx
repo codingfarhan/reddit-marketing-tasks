@@ -67,30 +67,6 @@ export default function Home() {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
-  async function sleep(ms: number) {
-    await new Promise((r) => setTimeout(r, ms))
-  }
-
-  async function withRetry<T>(fn: () => Promise<T>, opts?: { tries?: number }) {
-    const tries = opts?.tries ?? 3
-    let lastError: unknown = null
-    for (let attempt = 1; attempt <= tries; attempt++) {
-      try {
-        return await fn()
-      } catch (e) {
-        lastError = e
-        const message = e instanceof Error ? e.message : ""
-        if (message.includes("AbortError")) break
-        if (attempt < tries) {
-          const backoff = attempt === 1 ? 500 : attempt === 2 ? 1500 : 3500
-          await sleep(backoff)
-          continue
-        }
-      }
-    }
-    throw lastError instanceof Error ? lastError : new Error("Retry failed")
-  }
-
   async function prepareScreenshot(file: File) {
     if (!file.type.startsWith("image/")) return file
     if (file.type === "image/jpeg" && file.size <= 3_500_000) return file
@@ -173,15 +149,14 @@ export default function Home() {
       contentType: file.type,
       size: file.size,
       useMultipart,
-      handleUploadUrl: `${window.location.origin}/api/blob-token`,
+      handleUploadUrl: "/api/blob-token",
     })
 
     try {
       const uploaded = await blobUpload(pathname, file, {
         access: "public",
-        handleUploadUrl: `${window.location.origin}/api/blob-token`,
+        handleUploadUrl: "/api/blob-token",
         clientPayload: file.type,
-        contentType: file.type || undefined,
         multipart: useMultipart,
         abortSignal: abortController.signal,
         onUploadProgress: (progress) => {
@@ -401,7 +376,7 @@ export default function Home() {
         }
       })
 
-      const uploaded = await withRetry(() => uploadScreenshotToBlob(taskId, processed, sid), { tries: 3 })
+      const uploaded = await uploadScreenshotToBlob(taskId, processed, sid)
 
       setShotsByTaskId((prev) => {
         const existing = prev[taskId]
@@ -692,7 +667,7 @@ export default function Home() {
                             return { ...prev, [activeTask.id]: { ...existing, isUploading: true, error: null } }
                           })
                           try {
-                            const uploaded = await withRetry(() => uploadScreenshotToBlob(activeTask.id, shot.file, sid), { tries: 3 })
+                            const uploaded = await uploadScreenshotToBlob(activeTask.id, shot.file, sid)
                             setShotsByTaskId((prev) => {
                               const existing = prev[activeTask.id]
                               if (!existing) return prev

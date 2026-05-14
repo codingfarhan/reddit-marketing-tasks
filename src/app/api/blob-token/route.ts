@@ -8,22 +8,22 @@ function isAllowedPathname(pathname: string) {
 }
 
 function isAllowedContentType(contentType: string) {
-  const allowedContentTypes = [
-    "image/*",
-    "application/pdf",
-    "text/plain",
-    "application/msword",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/vnd.ms-excel",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.ms-powerpoint",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  ]
-
   return allowedContentTypes.some((type) =>
     type.endsWith("/*") ? contentType.startsWith(type.slice(0, -1)) : type === contentType,
   )
 }
+
+const allowedContentTypes = [
+  "image/*",
+  "application/pdf",
+  "text/plain",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+]
 
 export async function POST(request: Request) {
   try {
@@ -42,10 +42,9 @@ export async function POST(request: Request) {
         }
 
         const tokenOptions = {
-          addRandomSuffix: false,
-          allowOverwrite: true,
+          addRandomSuffix: true,
           maximumSizeInBytes: 25 * 1024 * 1024,
-          allowedContentTypes: [contentType],
+          allowedContentTypes,
           validUntil: Date.now() + 60 * 60 * 1000,
         }
 
