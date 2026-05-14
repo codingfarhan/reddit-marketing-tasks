@@ -1,115 +1,111 @@
-import { put } from "@vercel/blob";
-import { redditTasks } from "@/lib/tasks";
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import path from "node:path"
+import { redditTasks } from "@/lib/tasks"
 
-export const runtime = "nodejs";
+export const runtime = "nodejs"
 
 type SavedTask = {
-  taskId: string;
-  redditUrl: string;
-  exampleComment: string;
-  generatedComment: string | null;
-  originalName: string;
-  storedPath: string;
-  blobUrl: string | null;
-  blobPathname: string | null;
-  size: number;
-  type: string;
-};
+  taskId: string
+  redditUrl: string
+  exampleComment: string
+  generatedComment: string | null
+  commentUrl: string
+}
 
 type Body = {
-  submissionId?: string;
-  name?: string;
-  redditUsername?: string;
+  submissionId?: string
+  name?: string
+  redditUsername?: string
   tasks?: Array<{
-    taskId?: string;
-    generatedComment?: string | null;
-    originalName?: string;
-    blobUrl?: string;
-    blobPathname?: string;
-    size?: number;
-    type?: string;
-  }>;
-};
+    taskId?: string
+    generatedComment?: string | null
+    commentUrl?: string
+  }>
+}
+
+type SubmissionMeta = {
+  submissionId: string
+  submittedAt: string
+  name: string
+  redditUsername: string
+  tasks: SavedTask[]
+}
+
+const submissionsFile = path.join(process.cwd(), "storage", "submissions.json")
+
+function isValidHttpUrl(value: string) {
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+  } catch {
+    return false
+  }
+}
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Body;
-    const submissionId = String(body.submissionId ?? "").trim();
-    const name = String(body.name ?? "").trim();
-    const redditUsername = String(body.redditUsername ?? "").trim();
+    const body = (await request.json()) as Body
+    const submissionId = String(body.submissionId ?? "").trim()
+    const name = String(body.name ?? "").trim()
+    const redditUsername = String(body.redditUsername ?? "").trim()
 
-    if (!submissionId)
-      return Response.json({ error: "Missing submissionId" }, { status: 400 });
-    if (!name) return Response.json({ error: "Missing name" }, { status: 400 });
-    if (!redditUsername) {
-      return Response.json({ error: "Missing redditUsername" }, { status: 400 });
-    }
+    if (!submissionId) return Response.json({ error: "Missing submissionId" }, { status: 400 })
+    if (!name) return Response.json({ error: "Missing name" }, { status: 400 })
+    if (!redditUsername) return Response.json({ error: "Missing redditUsername" }, { status: 400 })
 
-    if (!process.env.BLOB_READ_WRITE_TOKEN) {
-      return Response.json(
-        { error: "Missing BLOB_READ_WRITE_TOKEN on server" },
-        { status: 500 },
-      );
-    }
-
-    const now = new Date();
-    const taskInputs = Array.isArray(body.tasks) ? body.tasks : [];
-    const inputByTaskId = new Map(
-      taskInputs.map((t) => [String(t.taskId ?? ""), t] as const),
-    );
+    const now = new Date()
+    const taskInputs = Array.isArray(body.tasks) ? body.tasks : []
+    const inputByTaskId = new Map(taskInputs.map((task) => [String(task.taskId ?? ""), task] as const))
 
     const savedTasks: SavedTask[] = redditTasks.map((task) => {
-      const input = inputByTaskId.get(task.id);
-      const blobUrl = input?.blobUrl ? String(input.blobUrl) : null;
-      const blobPathname = input?.blobPathname ? String(input.blobPathname) : null;
-      const originalName = input?.originalName ? String(input.originalName) : task.id;
-      const size = typeof input?.size === "number" ? input.size : 0;
-      const type = input?.type ? String(input.type) : "image/*";
-      const generatedComment =
-        typeof input?.generatedComment === "string" && input.generatedComment.trim()
-          ? input.generatedComment.trim()
-          : null;
+      const input = inputByTaskId.get(task.id)
+      const commentUrl = String(input?.commentUrl ?? "").trim()
+      const generatedComment = typeof input?.generatedComment === "string" && input.generatedComment.trim() ? input.generatedComment.trim() : null
 
       return {
         taskId: task.id,
         redditUrl: task.redditUrl,
         exampleComment: task.exampleComment,
         generatedComment,
-        originalName,
-        storedPath: blobPathname ?? `submissions/${submissionId}/screenshots/${task.id}`,
-        blobUrl,
-        blobPathname,
-        size,
-        type,
-      };
-    });
+        commentUrl,
+      }
+    })
 
-    const missing = savedTasks.find((t) => !t.blobUrl);
+    const missing = savedTasks.find((task) => !task.commentUrl)
     if (missing) {
-      return Response.json(
-        { error: `Missing uploaded screenshot for ${missing.taskId}` },
-        { status: 400 },
-      );
+      return Response.json({ error: `Missing Reddit comment URL for ${missing.taskId}` }, { status: 400 })
     }
 
-    const meta = {
+    const invalid = savedTasks.find((task) => !isValidHttpUrl(task.commentUrl))
+    if (invalid) {
+      return Response.json({ error: `Invalid Reddit comment URL for ${invalid.taskId}` }, { status: 400 })
+    }
+
+    const meta: SubmissionMeta = {
       submissionId,
       submittedAt: now.toISOString(),
       name,
       redditUsername,
       tasks: savedTasks,
-    };
+    }
 
-    const metaJson = JSON.stringify(meta, null, 2);
-    await put(`submissions/${submissionId}/meta.json`, metaJson, {
-      access: "public",
-      addRandomSuffix: false,
-      contentType: "application/json",
-    });
+    await mkdir(path.dirname(submissionsFile), { recursive: true })
 
-    return Response.json({ ok: true, submissionId });
+    let existing: SubmissionMeta[] = []
+    try {
+      const raw = await readFile(submissionsFile, "utf8")
+      const parsed = JSON.parse(raw) as unknown
+      existing = Array.isArray(parsed) ? (parsed as SubmissionMeta[]) : []
+    } catch {
+      existing = []
+    }
+
+    const withoutCurrent = existing.filter((submission) => submission.submissionId !== submissionId)
+    await writeFile(submissionsFile, JSON.stringify([meta, ...withoutCurrent], null, 2), "utf8")
+
+    return Response.json({ ok: true, submissionId })
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    return Response.json({ error: message }, { status: 500 });
+    const message = err instanceof Error ? err.message : "Unknown error"
+    return Response.json({ error: message }, { status: 500 })
   }
 }

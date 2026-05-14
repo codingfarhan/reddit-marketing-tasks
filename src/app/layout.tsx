@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Reddit Tasks Submission",
-  description: "Submit screenshots for 15 tasks.",
+  description: "Submit Reddit comment URLs for 15 tasks.",
 };
 
 export default function RootLayout({

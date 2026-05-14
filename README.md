@@ -10,12 +10,7 @@ Create `.env.local`:
 OPENAI_API_KEY=your_key_here
 # Optional
 OPENAI_MODEL=gpt-4.1-mini
-
-# Required for uploads on Vercel Blob (recommended for production)
-BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
 ```
-
-Note: uploads use **Vercel Blob client uploads** to avoid Vercel serverless request size limits.
 
 ### 2) Run the dev server
 
@@ -35,7 +30,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 Edit tasks here: `src/lib/tasks.ts`
 
-Submissions (screenshots + meta) are saved locally to `storage/submissions/` (ignored by git).
+Submissions are saved locally in `storage/submissions.json` (ignored by git).
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
