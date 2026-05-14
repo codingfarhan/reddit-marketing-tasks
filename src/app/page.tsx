@@ -154,6 +154,15 @@ export default function Home() {
   async function uploadScreenshotToBlob(taskId: string, file: File, sid: string) {
     const ext = pickExtension(file)
     const pathname = `submissions/${sid}/screenshots/${taskId}${ext || ""}`
+    const useMultipart = file.size > 8 * 1024 * 1024
+
+    console.info("[blob-upload] requesting token", {
+      taskId,
+      pathname,
+      contentType: file.type,
+      size: file.size,
+      useMultipart,
+    })
 
     const tokenRes = await fetch("/api/blob-token", {
       method: "POST",
@@ -161,16 +170,43 @@ export default function Home() {
       body: JSON.stringify({ pathname, contentType: file.type }),
       cache: "no-store",
     })
-    const tokenData = (await tokenRes.json()) as { token?: string; error?: string }
+    const tokenText = await tokenRes.text()
+    let tokenData: { token?: string; error?: string } = {}
+    try {
+      tokenData = tokenText ? (JSON.parse(tokenText) as { token?: string; error?: string }) : {}
+    } catch {
+      tokenData = { error: tokenText || "Invalid token response" }
+    }
+    console.info("[blob-upload] token response", {
+      ok: tokenRes.ok,
+      status: tokenRes.status,
+      statusText: tokenRes.statusText,
+      error: tokenData.error,
+      hasToken: Boolean(tokenData.token),
+    })
     if (!tokenRes.ok || !tokenData.token) throw new Error(tokenData.error || "Failed to get upload token")
 
-    const useMultipart = file.size > 8 * 1024 * 1024
-    return await blobPut(pathname, file, {
-      access: "public",
-      token: tokenData.token,
-      contentType: file.type || undefined,
-      multipart: useMultipart,
-    })
+    try {
+      const uploaded = await blobPut(pathname, file, {
+        access: "public",
+        token: tokenData.token,
+        contentType: file.type || undefined,
+        multipart: useMultipart,
+      })
+      console.info("[blob-upload] upload success", uploaded)
+      return uploaded
+    } catch (error) {
+      console.error("[blob-upload] upload failed", {
+        taskId,
+        pathname,
+        contentType: file.type,
+        size: file.size,
+        useMultipart,
+        error,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
   }
 
   function safeSegment(input: string) {

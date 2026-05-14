@@ -17,6 +17,7 @@ export async function POST(request: Request) {
     const body = (await request.json()) as Body
     const pathname = String(body.pathname ?? "").trim()
     const contentType = String(body.contentType ?? "").trim()
+    console.info("[blob-token] request", { pathname, contentType })
     if (!pathname) return Response.json({ error: "Missing pathname" }, { status: 400 })
     if (!isAllowedPathname(pathname)) return Response.json({ error: "Invalid pathname" }, { status: 400 })
 
@@ -45,12 +46,27 @@ export async function POST(request: Request) {
       validUntil: Date.now() + 360000,
     }
 
+    console.info("[blob-token] generating token", {
+      pathname: tokenOptions.pathname,
+      allowedContentTypes: tokenOptions.allowedContentTypes,
+      maximumSizeInBytes: tokenOptions.maximumSizeInBytes,
+      allowOverwrite: tokenOptions.allowOverwrite,
+      validUntil: tokenOptions.validUntil,
+    })
+
     const token = await generateClientTokenFromReadWriteToken(tokenOptions)
+
+    console.info("[blob-token] generated token", {
+      pathname,
+      contentType,
+      tokenPrefix: token.slice(0, 30),
+    })
 
     return Response.json({ token }, { headers: { "Cache-Control": "no-store, max-age=0" } })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     const status = typeof err === "object" && err !== null && "status" in err && typeof err.status === "number" ? err.status : 500
+    console.error("[blob-token] failed", { status, message, err })
     return Response.json({ error: message }, { status })
   }
 }
