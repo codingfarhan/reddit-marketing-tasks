@@ -15,6 +15,8 @@ OPENAI_MODEL=gpt-4.1-mini
 BLOB_READ_WRITE_TOKEN=your_vercel_blob_token
 ```
 
+Note: uploads use **Vercel Blob client uploads** to avoid Vercel serverless request size limits.
+
 ### 2) Run the dev server
 
 First, run the development server:

@@ -2,10 +2,19 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { redditTasks } from "@/lib/tasks"
+import { put as blobPut } from "@vercel/blob/client"
 
 type Step = { kind: "pickName" } | { kind: "redditUsername" } | { kind: "task"; index: number } | { kind: "done"; submissionId: string }
 
-type SelectedShot = { file: File; previewUrl: string }
+type SelectedShot = {
+  file: File
+  previewUrl: string
+  blobUrl: string | null
+  blobPathname: string | null
+  isUploading: boolean
+  isProcessing: boolean
+  error: string | null
+}
 
 function ProgressBar({ current, total }: { current: number; total: number }) {
   const pct = total <= 0 ? 0 : Math.min(100, Math.round((current / total) * 100))
@@ -36,6 +45,7 @@ export default function Home() {
   const [commentErrorByTaskId, setCommentErrorByTaskId] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [submissionId, setSubmissionId] = useState<string | null>(null)
 
   const autoGenAttemptedRef = useRef<Record<string, boolean>>({})
   const [copiedTaskId, setCopiedTaskId] = useState<string | null>(null)
@@ -55,6 +65,99 @@ export default function Home() {
   }, [step, totalSteps])
 
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+
+  async function sleep(ms: number) {
+    await new Promise((r) => setTimeout(r, ms))
+  }
+
+  async function withRetry<T>(fn: () => Promise<T>, opts?: { tries?: number }) {
+    const tries = opts?.tries ?? 3
+    let lastError: unknown = null
+    for (let attempt = 1; attempt <= tries; attempt++) {
+      try {
+        return await fn()
+      } catch (e) {
+        lastError = e
+        const message = e instanceof Error ? e.message : ""
+        if (message.includes("AbortError")) break
+        if (attempt < tries) {
+          const backoff = attempt === 1 ? 500 : attempt === 2 ? 1500 : 3500
+          await sleep(backoff)
+          continue
+        }
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error("Retry failed")
+  }
+
+  async function prepareScreenshot(file: File) {
+    if (file.type === "image/jpeg" && file.size <= 3_500_000) return file
+
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.onerror = () => reject(new Error("Failed to read image"))
+      reader.readAsDataURL(file)
+    })
+
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const el = new Image()
+      el.onload = () => resolve(el)
+      el.onerror = () => reject(new Error("Failed to decode image"))
+      el.src = dataUrl
+    })
+
+    const maxDim = 1600
+    const scale = Math.min(1, maxDim / Math.max(img.width, img.height))
+    const w = Math.max(1, Math.round(img.width * scale))
+    const h = Math.max(1, Math.round(img.height * scale))
+
+    const canvas = document.createElement("canvas")
+    canvas.width = w
+    canvas.height = h
+    const ctx = canvas.getContext("2d")
+    if (!ctx) throw new Error("Canvas not supported")
+    ctx.drawImage(img, 0, 0, w, h)
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (b) => (b ? resolve(b) : reject(new Error("Failed to encode image"))),
+        "image/jpeg",
+        0.82,
+      )
+    })
+
+    return new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", { type: "image/jpeg" })
+  }
+
+  async function uploadScreenshotToBlob(taskId: string, file: File, sid: string) {
+    const pathname = `submissions/${sid}/screenshots/${taskId}.jpg`
+
+    const tokenRes = await fetch("/api/blob-token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pathname }),
+    })
+    const tokenData = (await tokenRes.json()) as { token?: string; error?: string }
+    if (!tokenRes.ok || !tokenData.token) throw new Error(tokenData.error || "Failed to get upload token")
+
+    return await blobPut(pathname, file, {
+      access: "public",
+      token: tokenData.token,
+      contentType: file.type || undefined,
+      multipart: true,
+    })
+  }
+
+  function safeSegment(input: string) {
+    return input
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 60)
+  }
 
   useEffect(() => {
     return () => {
@@ -135,7 +238,7 @@ export default function Home() {
   async function onSubmitAll() {
     setSubmitError(null)
 
-    const missing = redditTasks.find((t) => !shotsByTaskId[t.id]?.file)
+    const missing = redditTasks.find((t) => !shotsByTaskId[t.id]?.blobUrl)
     if (missing) {
       setSubmitError(`Missing screenshot for ${missing.title}.`)
       return
@@ -143,16 +246,32 @@ export default function Home() {
 
     try {
       setIsSubmitting(true)
-      const fd = new FormData()
-      fd.set("name", name.trim())
-      fd.set("redditUsername", redditUsername.trim())
-      for (const task of redditTasks) {
-        fd.set(`screenshot_${task.id}`, shotsByTaskId[task.id].file)
-        const comment = generatedCommentByTaskId[task.id]
-        if (comment?.trim()) fd.set(`comment_${task.id}`, comment.trim())
-      }
+      const sid = submissionId
+      if (!sid) throw new Error("Missing submissionId")
 
-      const res = await fetch("/api/submit", { method: "POST", body: fd })
+      const tasksPayload = redditTasks.map((t) => {
+        const shot = shotsByTaskId[t.id]
+        return {
+          taskId: t.id,
+          generatedComment: generatedCommentByTaskId[t.id] ?? null,
+          originalName: shot?.file?.name ?? t.id,
+          blobUrl: shot?.blobUrl ?? null,
+          blobPathname: shot?.blobPathname ?? null,
+          size: shot?.file?.size ?? 0,
+          type: shot?.file?.type ?? "",
+        }
+      })
+
+      const res = await fetch("/api/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          submissionId: sid,
+          name: name.trim(),
+          redditUsername: redditUsername.trim(),
+          tasks: tasksPayload,
+        }),
+      })
       const data = (await res.json()) as { ok?: boolean; submissionId?: string; error?: string }
       if (!res.ok || !data.ok || !data.submissionId) {
         throw new Error(data.error || "Submission failed")
@@ -165,24 +284,67 @@ export default function Home() {
     }
   }
 
-  function onPickScreenshot(taskId: string, file: File | null) {
+  async function onPickScreenshot(taskId: string, file: File | null) {
     setSubmitError(null)
     if (!file) return
     if (!file.type.startsWith("image/")) {
       setSubmitError("Please upload an image file (PNG/JPG/WebP).")
       return
     }
-    const maxBytes = 4 * 1024 * 1024
+    const maxBytes = 25 * 1024 * 1024
     if (file.size > maxBytes) {
-      setSubmitError("Please keep screenshots under 4MB.")
+      setSubmitError("Please keep screenshots under 25MB.")
       return
     }
 
+    const sid = submissionId
+    if (!sid) {
+      setSubmitError("Missing submission id. Go back and start tasks again.")
+      return
+    }
+
+    const previewUrl = URL.createObjectURL(file)
     setShotsByTaskId((prev) => {
       const existing = prev[taskId]
       if (existing) URL.revokeObjectURL(existing.previewUrl)
-      return { ...prev, [taskId]: { file, previewUrl: URL.createObjectURL(file) } }
+      return {
+        ...prev,
+        [taskId]: { file, previewUrl, blobUrl: null, blobPathname: null, isUploading: false, isProcessing: true, error: null },
+      }
     })
+
+    try {
+      const processed = await prepareScreenshot(file)
+      const processedPreview = URL.createObjectURL(processed)
+      setShotsByTaskId((prev) => {
+        const existing = prev[taskId]
+        if (!existing) return prev
+        URL.revokeObjectURL(existing.previewUrl)
+        return {
+          ...prev,
+          [taskId]: { ...existing, file: processed, previewUrl: processedPreview, isProcessing: false, isUploading: true, error: null },
+        }
+      })
+
+      const uploaded = await withRetry(() => uploadScreenshotToBlob(taskId, processed, sid), { tries: 3 })
+
+      setShotsByTaskId((prev) => {
+        const existing = prev[taskId]
+        if (!existing) return prev
+        return {
+          ...prev,
+          [taskId]: { ...existing, blobUrl: uploaded.url, blobPathname: uploaded.pathname, isUploading: false, error: null },
+        }
+      })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Upload failed"
+      setShotsByTaskId((prev) => {
+        const existing = prev[taskId]
+        if (!existing) return prev
+        return { ...prev, [taskId]: { ...existing, isProcessing: false, isUploading: false, error: msg } }
+      })
+      setSubmitError(msg)
+    }
   }
 
   function goBack() {
@@ -206,14 +368,24 @@ export default function Home() {
 
   function goNextFromReddit() {
     if (!canContinueFromReddit) return
+    const sid = `${new Date().toISOString().replace(/[:.]/g, "-")}_${safeSegment(name)}_${safeSegment(redditUsername)}_${crypto.randomUUID()}`
+    setSubmissionId(sid)
     setStep({ kind: "task", index: 0 })
   }
 
   function goNextTask() {
     if (step.kind !== "task") return
     const task = redditTasks[step.index]
-    if (!shotsByTaskId[task.id]?.file) {
+    if (!shotsByTaskId[task.id]?.blobUrl) {
       setSubmitError("Upload a screenshot to continue.")
+      return
+    }
+    if (shotsByTaskId[task.id]?.isProcessing) {
+      setSubmitError("Optimizing screenshot… please wait.")
+      return
+    }
+    if (shotsByTaskId[task.id]?.isUploading) {
+      setSubmitError("Screenshot is still uploading. Please wait…")
       return
     }
     if (step.index === redditTasks.length - 1) {
@@ -405,7 +577,7 @@ export default function Home() {
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm font-semibold">Screenshot</p>
-                    <p className="text-xs text-zinc-600">PNG/JPG/WebP • up to 4MB</p>
+                    <p className="text-xs text-zinc-600">PNG/JPG/WebP • up to 25MB</p>
                   </div>
                   <input
                     ref={fileInputRef}
@@ -416,6 +588,61 @@ export default function Home() {
                     className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-zinc-900 file:px-3 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:bg-zinc-800 sm:w-auto"
                   />
                 </div>
+
+                {shotsByTaskId[activeTask.id]?.isUploading && (
+                  <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900">
+                    Uploading screenshot…
+                  </div>
+                )}
+                {shotsByTaskId[activeTask.id]?.isProcessing && (
+                  <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900">
+                    Optimizing screenshot…
+                  </div>
+                )}
+                {shotsByTaskId[activeTask.id]?.error && (
+                  <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-900">
+                    <div>Upload failed: {shotsByTaskId[activeTask.id]?.error}</div>
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        disabled={isSubmitting || shotsByTaskId[activeTask.id]?.isUploading || shotsByTaskId[activeTask.id]?.isProcessing}
+                        onClick={async () => {
+                          const sid = submissionId
+                          const shot = shotsByTaskId[activeTask.id]
+                          if (!sid || !shot?.file) return
+                          setSubmitError(null)
+                          setShotsByTaskId((prev) => {
+                            const existing = prev[activeTask.id]
+                            if (!existing) return prev
+                            return { ...prev, [activeTask.id]: { ...existing, isUploading: true, error: null } }
+                          })
+                          try {
+                            const uploaded = await withRetry(() => uploadScreenshotToBlob(activeTask.id, shot.file, sid), { tries: 3 })
+                            setShotsByTaskId((prev) => {
+                              const existing = prev[activeTask.id]
+                              if (!existing) return prev
+                              return {
+                                ...prev,
+                                [activeTask.id]: { ...existing, blobUrl: uploaded.url, blobPathname: uploaded.pathname, isUploading: false, error: null },
+                              }
+                            })
+                          } catch (e) {
+                            const msg = e instanceof Error ? e.message : "Upload failed"
+                            setShotsByTaskId((prev) => {
+                              const existing = prev[activeTask.id]
+                              if (!existing) return prev
+                              return { ...prev, [activeTask.id]: { ...existing, isUploading: false, error: msg } }
+                            })
+                            setSubmitError(msg)
+                          }
+                        }}
+                        className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-3 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        Retry upload
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 {shotsByTaskId[activeTask.id]?.previewUrl && (
                   <div className="mt-4 overflow-hidden rounded-xl border border-zinc-200 bg-white">
@@ -451,7 +678,7 @@ export default function Home() {
           {step.kind === "done" && (
             <section className="fade-in-up">
               <h2 className="text-base font-semibold">Submitted</h2>
-              <p className="mt-1 text-sm text-zinc-600">Thanks! Your submission has been saved locally on this server.</p>
+              <p className="mt-1 text-sm text-zinc-600">Thanks! Your submission has been saved.</p>
               <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
                 <p className="text-sm font-medium">Submission ID</p>
                 <p className="mt-1 break-all font-mono text-xs text-zinc-700">{step.submissionId}</p>
@@ -466,6 +693,7 @@ export default function Home() {
                     setGeneratedCommentByTaskId({})
                     setRedditUsername("")
                     setName("")
+                    setSubmissionId(null)
                     setStep({ kind: "pickName" })
                   }}
                   className="inline-flex items-center justify-center rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-900 transition hover:bg-zinc-50"

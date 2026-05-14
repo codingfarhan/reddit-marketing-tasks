@@ -107,8 +107,7 @@ export default async function SubmissionsPage() {
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h1 className="text-lg font-semibold tracking-tight">Submissions</h1>
           <p className="mt-1 text-sm text-zinc-600">
-            Local dashboard for viewing saved submissions in{" "}
-            <span className="font-mono">storage/submissions</span>.
+            Dashboard for viewing saved submissions.
           </p>
         </div>
 

@@ -1,7 +1,5 @@
-import { redditTasks } from "@/lib/tasks";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { put } from "@vercel/blob";
+import { redditTasks } from "@/lib/tasks";
 
 export const runtime = "nodejs";
 
@@ -18,135 +16,80 @@ type SavedTask = {
   type: string;
 };
 
-function safeSegment(input: string) {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 60);
-}
-
-function getExtensionFromFile(file: File) {
-  const fromName = file.name?.split(".").pop();
-  if (fromName && fromName.length <= 8) return `.${fromName}`;
-  if (file.type === "image/png") return ".png";
-  if (file.type === "image/jpeg") return ".jpg";
-  if (file.type === "image/webp") return ".webp";
-  return "";
-}
+type Body = {
+  submissionId?: string;
+  name?: string;
+  redditUsername?: string;
+  tasks?: Array<{
+    taskId?: string;
+    generatedComment?: string | null;
+    originalName?: string;
+    blobUrl?: string;
+    blobPathname?: string;
+    size?: number;
+    type?: string;
+  }>;
+};
 
 export async function POST(request: Request) {
   try {
-    const formData = await request.formData();
+    const body = (await request.json()) as Body;
+    const submissionId = String(body.submissionId ?? "").trim();
+    const name = String(body.name ?? "").trim();
+    const redditUsername = String(body.redditUsername ?? "").trim();
 
-    const name = String(formData.get("name") ?? "").trim();
-    const redditUsername = String(formData.get("redditUsername") ?? "").trim();
-
+    if (!submissionId)
+      return Response.json({ error: "Missing submissionId" }, { status: 400 });
     if (!name) return Response.json({ error: "Missing name" }, { status: 400 });
     if (!redditUsername) {
       return Response.json({ error: "Missing redditUsername" }, { status: 400 });
     }
 
-    const now = new Date();
-    const submissionId = `${now
-      .toISOString()
-      .replace(/[:.]/g, "-")}_${safeSegment(name)}_${safeSegment(
-      redditUsername,
-    )}`;
-
-    const useBlob = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
-
-    const rootDir = path.join(process.cwd(), "storage", "submissions", submissionId);
-    const shotsDir = path.join(rootDir, "screenshots");
-    if (!useBlob) {
-      await mkdir(shotsDir, { recursive: true });
+    if (!process.env.BLOB_READ_WRITE_TOKEN) {
+      return Response.json(
+        { error: "Missing BLOB_READ_WRITE_TOKEN on server" },
+        { status: 500 },
+      );
     }
 
-    const savedTasks: SavedTask[] = [];
+    const now = new Date();
+    const taskInputs = Array.isArray(body.tasks) ? body.tasks : [];
+    const inputByTaskId = new Map(
+      taskInputs.map((t) => [String(t.taskId ?? ""), t] as const),
+    );
 
-    for (let i = 0; i < redditTasks.length; i++) {
-      const task = redditTasks[i];
-      const key = `screenshot_${task.id}`;
-      const maybeFile = formData.get(key);
-      const commentKey = `comment_${task.id}`;
-      const generatedCommentRaw = formData.get(commentKey);
+    const savedTasks: SavedTask[] = redditTasks.map((task) => {
+      const input = inputByTaskId.get(task.id);
+      const blobUrl = input?.blobUrl ? String(input.blobUrl) : null;
+      const blobPathname = input?.blobPathname ? String(input.blobPathname) : null;
+      const originalName = input?.originalName ? String(input.originalName) : task.id;
+      const size = typeof input?.size === "number" ? input.size : 0;
+      const type = input?.type ? String(input.type) : "image/*";
       const generatedComment =
-        typeof generatedCommentRaw === "string" && generatedCommentRaw.trim().length > 0
-          ? generatedCommentRaw.trim()
+        typeof input?.generatedComment === "string" && input.generatedComment.trim()
+          ? input.generatedComment.trim()
           : null;
 
-      if (!maybeFile) {
-        return Response.json(
-          { error: `Missing screenshot for ${task.id}` },
-          { status: 400 },
-        );
-      }
-
-      if (!(maybeFile instanceof File)) {
-        return Response.json(
-          { error: `Invalid screenshot for ${task.id}` },
-          { status: 400 },
-        );
-      }
-
-      if (maybeFile.size <= 0) {
-        return Response.json(
-          { error: `Empty screenshot for ${task.id}` },
-          { status: 400 },
-        );
-      }
-
-      const maxBytes = 4 * 1024 * 1024;
-      if (maybeFile.size > maxBytes) {
-        return Response.json(
-          { error: `Screenshot too large for ${task.id} (max 4MB)` },
-          { status: 400 },
-        );
-      }
-
-      if (!maybeFile.type.startsWith("image/")) {
-        return Response.json(
-          { error: `Screenshot must be an image for ${task.id}` },
-          { status: 400 },
-        );
-      }
-
-      const ext = getExtensionFromFile(maybeFile);
-      const filename = `${String(i + 1).padStart(2, "0")}_${task.id}${ext}`;
-      const storedPath = path.join("screenshots", filename);
-      const buffer = Buffer.from(await maybeFile.arrayBuffer());
-
-      let blobUrl: string | null = null;
-      let blobPathname: string | null = null;
-
-      if (useBlob) {
-        const pathnameInBlob = `submissions/${submissionId}/screenshots/${filename}`;
-        const uploaded = await put(pathnameInBlob, buffer, {
-          access: "public",
-          addRandomSuffix: false,
-          contentType: maybeFile.type || undefined,
-        });
-        blobUrl = uploaded.url;
-        blobPathname = uploaded.pathname;
-      } else {
-        const absPath = path.join(rootDir, storedPath);
-        await writeFile(absPath, buffer);
-      }
-
-      savedTasks.push({
+      return {
         taskId: task.id,
         redditUrl: task.redditUrl,
         exampleComment: task.exampleComment,
         generatedComment,
-        originalName: maybeFile.name || filename,
-        storedPath,
+        originalName,
+        storedPath: `screenshots/${task.id}.jpg`,
         blobUrl,
         blobPathname,
-        size: maybeFile.size,
-        type: maybeFile.type,
-      });
+        size,
+        type,
+      };
+    });
+
+    const missing = savedTasks.find((t) => !t.blobUrl);
+    if (missing) {
+      return Response.json(
+        { error: `Missing uploaded screenshot for ${missing.taskId}` },
+        { status: 400 },
+      );
     }
 
     const meta = {
@@ -158,17 +101,11 @@ export async function POST(request: Request) {
     };
 
     const metaJson = JSON.stringify(meta, null, 2);
-    if (useBlob) {
-      await put(`submissions/${submissionId}/meta.json`, metaJson, {
-        access: "public",
-        addRandomSuffix: false,
-        contentType: "application/json",
-      });
-    } else {
-      await writeFile(path.join(rootDir, "meta.json"), metaJson, {
-        encoding: "utf8",
-      });
-    }
+    await put(`submissions/${submissionId}/meta.json`, metaJson, {
+      access: "public",
+      addRandomSuffix: false,
+      contentType: "application/json",
+    });
 
     return Response.json({ ok: true, submissionId });
   } catch (err) {
