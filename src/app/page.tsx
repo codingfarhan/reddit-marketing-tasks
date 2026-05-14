@@ -155,6 +155,17 @@ export default function Home() {
     const ext = pickExtension(file)
     const pathname = `submissions/${sid}/screenshots/${taskId}${ext || ""}`
     const useMultipart = file.size > 8 * 1024 * 1024
+    const abortController = new AbortController()
+    const timeoutId = window.setTimeout(() => {
+      console.error("[blob-upload] upload timed out", {
+        taskId,
+        pathname,
+        contentType: file.type,
+        size: file.size,
+        useMultipart,
+      })
+      abortController.abort()
+    }, 30_000)
 
     console.info("[blob-upload] starting upload", {
       taskId,
@@ -162,15 +173,26 @@ export default function Home() {
       contentType: file.type,
       size: file.size,
       useMultipart,
+      handleUploadUrl: `${window.location.origin}/api/blob-token`,
     })
 
     try {
       const uploaded = await blobUpload(pathname, file, {
         access: "public",
-        handleUploadUrl: "/api/blob-token",
+        handleUploadUrl: `${window.location.origin}/api/blob-token`,
         clientPayload: file.type,
         contentType: file.type || undefined,
         multipart: useMultipart,
+        abortSignal: abortController.signal,
+        onUploadProgress: (progress) => {
+          console.info("[blob-upload] progress", {
+            taskId,
+            pathname,
+            loaded: progress.loaded,
+            total: progress.total,
+            percentage: progress.percentage,
+          })
+        },
       })
       console.info("[blob-upload] upload success", uploaded)
       return uploaded
@@ -185,6 +207,8 @@ export default function Home() {
         message: error instanceof Error ? error.message : String(error),
       })
       throw error
+    } finally {
+      window.clearTimeout(timeoutId)
     }
   }
 
