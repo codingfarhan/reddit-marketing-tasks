@@ -1,68 +1,68 @@
-import { generateClientTokenFromReadWriteToken } from "@vercel/blob/client"
+import { handleUpload, type HandleUploadBody } from "@vercel/blob/client"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-
-type Body = {
-  pathname?: string
-  contentType?: string
-}
 
 function isAllowedPathname(pathname: string) {
   return pathname.startsWith("submissions/") && !pathname.includes("..")
 }
 
+function isAllowedContentType(contentType: string) {
+  const allowedContentTypes = [
+    "image/*",
+    "application/pdf",
+    "text/plain",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  ]
+
+  return allowedContentTypes.some((type) =>
+    type.endsWith("/*") ? contentType.startsWith(type.slice(0, -1)) : type === contentType,
+  )
+}
+
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Body
-    const pathname = String(body.pathname ?? "").trim()
-    const contentType = String(body.contentType ?? "").trim()
-    console.info("[blob-token] request", { pathname, contentType })
-    if (!pathname) return Response.json({ error: "Missing pathname" }, { status: 400 })
-    if (!isAllowedPathname(pathname)) return Response.json({ error: "Invalid pathname" }, { status: 400 })
+    const body = (await request.json()) as HandleUploadBody
 
-    const allowedContentTypes = [
-      "image/*",
-      "application/pdf",
-      "text/plain",
-      "application/msword",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "application/vnd.ms-excel",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "application/vnd.ms-powerpoint",
-      "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-    ]
+    const jsonResponse = await handleUpload({
+      body,
+      request,
+      onBeforeGenerateToken: async (pathname, clientPayload, multipart) => {
+        const contentType = String(clientPayload ?? "").trim()
+        console.info("[blob-token] request", { pathname, contentType, multipart })
 
-    if (contentType && !allowedContentTypes.some((t) => (t.endsWith("/*") ? contentType.startsWith(t.slice(0, -1)) : t === contentType))) {
-      return Response.json({ error: "Unsupported contentType" }, { status: 400 })
-    }
+        if (!isAllowedPathname(pathname)) throw new Error("Invalid pathname")
+        if (!contentType || !isAllowedContentType(contentType)) {
+          throw new Error("Unsupported contentType")
+        }
 
-    const tokenOptions = {
-      pathname,
-      addRandomSuffix: false,
-      allowOverwrite: true,
-      maximumSizeInBytes: 25 * 1024 * 1024,
-      allowedContentTypes: contentType ? [contentType] : undefined,
-      validUntil: Date.now() + 360000,
-    }
+        const tokenOptions = {
+          addRandomSuffix: false,
+          allowOverwrite: true,
+          maximumSizeInBytes: 25 * 1024 * 1024,
+          allowedContentTypes: [contentType],
+          validUntil: Date.now() + 60 * 60 * 1000,
+        }
 
-    console.info("[blob-token] generating token", {
-      pathname: tokenOptions.pathname,
-      allowedContentTypes: tokenOptions.allowedContentTypes,
-      maximumSizeInBytes: tokenOptions.maximumSizeInBytes,
-      allowOverwrite: tokenOptions.allowOverwrite,
-      validUntil: tokenOptions.validUntil,
+        console.info("[blob-token] generating token", {
+          pathname,
+          contentType,
+          multipart,
+          ...tokenOptions,
+        })
+
+        return tokenOptions
+      },
     })
 
-    const token = await generateClientTokenFromReadWriteToken(tokenOptions)
-
-    console.info("[blob-token] generated token", {
-      pathname,
-      contentType,
-      tokenPrefix: token.slice(0, 30),
+    return Response.json(jsonResponse, {
+      headers: { "Cache-Control": "no-store, max-age=0" },
     })
-
-    return Response.json({ token }, { headers: { "Cache-Control": "no-store, max-age=0" } })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error"
     const status = typeof err === "object" && err !== null && "status" in err && typeof err.status === "number" ? err.status : 500

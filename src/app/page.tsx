@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { redditTasks } from "@/lib/tasks"
-import { put as blobPut } from "@vercel/blob/client"
+import { upload as blobUpload } from "@vercel/blob/client"
 
 type Step = { kind: "pickName" } | { kind: "redditUsername" } | { kind: "task"; index: number } | { kind: "done"; submissionId: string }
 
@@ -156,7 +156,7 @@ export default function Home() {
     const pathname = `submissions/${sid}/screenshots/${taskId}${ext || ""}`
     const useMultipart = file.size > 8 * 1024 * 1024
 
-    console.info("[blob-upload] requesting token", {
+    console.info("[blob-upload] starting upload", {
       taskId,
       pathname,
       contentType: file.type,
@@ -164,32 +164,11 @@ export default function Home() {
       useMultipart,
     })
 
-    const tokenRes = await fetch("/api/blob-token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ pathname, contentType: file.type }),
-      cache: "no-store",
-    })
-    const tokenText = await tokenRes.text()
-    let tokenData: { token?: string; error?: string } = {}
     try {
-      tokenData = tokenText ? (JSON.parse(tokenText) as { token?: string; error?: string }) : {}
-    } catch {
-      tokenData = { error: tokenText || "Invalid token response" }
-    }
-    console.info("[blob-upload] token response", {
-      ok: tokenRes.ok,
-      status: tokenRes.status,
-      statusText: tokenRes.statusText,
-      error: tokenData.error,
-      hasToken: Boolean(tokenData.token),
-    })
-    if (!tokenRes.ok || !tokenData.token) throw new Error(tokenData.error || "Failed to get upload token")
-
-    try {
-      const uploaded = await blobPut(pathname, file, {
+      const uploaded = await blobUpload(pathname, file, {
         access: "public",
-        token: tokenData.token,
+        handleUploadUrl: "/api/blob-token",
+        clientPayload: file.type,
         contentType: file.type || undefined,
         multipart: useMultipart,
       })
