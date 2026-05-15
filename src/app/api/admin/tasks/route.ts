@@ -8,7 +8,7 @@ type Body = {
   tasks?: AdminRedditTask[]
 }
 
-function normalizeTasks(tasks: AdminRedditTask[]) {
+function normalizeTasks(tasks: AdminRedditTask[]): AdminRedditTask[] {
   return tasks.map((task, index) => {
     const id = `task-${String(index + 1).padStart(2, "0")}`
 
@@ -16,6 +16,8 @@ function normalizeTasks(tasks: AdminRedditTask[]) {
       id,
       redditUrl: String(task?.redditUrl ?? "").trim(),
       postText: String(task?.postText ?? "").trim(),
+      commentMode: task?.commentMode === "custom" ? "custom" : "ai",
+      customComment: String(task?.customComment ?? "").trim(),
     }
   })
 }

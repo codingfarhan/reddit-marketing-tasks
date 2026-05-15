@@ -4,6 +4,8 @@ export type AdminRedditTask = {
   id: string
   redditUrl: string
   postText: string
+  commentMode: "ai" | "custom"
+  customComment: string
 }
 
 export type GeneratedTaskComments = {

@@ -17,6 +17,8 @@ function createTask(index: number): AdminRedditTask {
     id: `task-${String(index + 1).padStart(2, "0")}`,
     redditUrl: "",
     postText: "",
+    commentMode: "ai",
+    customComment: "",
   }
 }
 
@@ -26,7 +28,11 @@ export default function AdminPage() {
   const [status, setStatus] = useState<Status>({ kind: "loading", message: "Loading tasks..." })
 
   const completedCount = useMemo(() => {
-    return tasks.filter((task) => task.redditUrl.trim() && task.postText.trim()).length
+    return tasks.filter(
+      (task) =>
+        task.redditUrl.trim() &&
+        (task.commentMode === "custom" ? task.customComment.trim() : task.postText.trim()),
+    ).length
   }, [tasks])
   const canGenerate = tasks.length > 0 && completedCount === tasks.length && status.kind !== "saving" && status.kind !== "generating"
 
@@ -191,6 +197,29 @@ export default function AdminPage() {
                 placeholder="Paste the post body/title/context here"
                 className="mt-2 w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
               />
+
+              <label className="mt-4 block text-sm font-medium">Comment source</label>
+              <select
+                value={task.commentMode}
+                onChange={(event) => updateTask(index, { commentMode: event.target.value === "custom" ? "custom" : "ai" })}
+                className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
+              >
+                <option value="ai">AI-generated comments</option>
+                <option value="custom">Custom admin comment</option>
+              </select>
+
+              {task.commentMode === "custom" && (
+                <>
+                  <label className="mt-4 block text-sm font-medium">Custom comment</label>
+                  <textarea
+                    value={task.customComment}
+                    onChange={(event) => updateTask(index, { customComment: event.target.value })}
+                    rows={4}
+                    placeholder="This same comment will be shown for every persona on this task"
+                    className="mt-2 w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
+                  />
+                </>
+              )}
             </div>
           ))}
 

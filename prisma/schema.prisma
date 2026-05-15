@@ -10,6 +10,8 @@ model AdminTask {
   id                String              @id
   redditUrl         String
   postText          String              @db.Text
+  commentMode       String              @default("ai")
+  customComment     String              @default("") @db.Text
   sortOrder         Int                 @unique
   isActive          Boolean             @default(true)
   createdAt         DateTime            @default(now())

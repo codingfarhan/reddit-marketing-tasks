@@ -1,0 +1,3 @@
+ALTER TABLE "AdminTask"
+ADD COLUMN "commentMode" TEXT NOT NULL DEFAULT 'ai',
+ADD COLUMN "customComment" TEXT NOT NULL DEFAULT '';

@@ -63,7 +63,13 @@ export async function POST(request: Request) {
     const configuredTasks = config.tasks
     const hasValidSetup =
       configuredTasks.length > 0 &&
-      configuredTasks.every((task) => task.id && task.redditUrl.trim() && task.postText.trim() && isValidHttpUrl(task.redditUrl)) &&
+      configuredTasks.every(
+        (task) =>
+          task.id &&
+          task.redditUrl.trim() &&
+          (task.commentMode === "custom" ? task.customComment.trim() : task.postText.trim()) &&
+          isValidHttpUrl(task.redditUrl),
+      ) &&
       config.generatedTaskComments.length === configuredTasks.length
 
     if (!hasValidSetup) {

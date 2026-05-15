@@ -270,7 +270,10 @@ export default function Home() {
     !loadError &&
     config &&
     (tasks.length === 0 ||
-      tasks.some((task) => !task.redditUrl || !task.postText) ||
+      tasks.some(
+        (task) =>
+          !task.redditUrl || (task.commentMode === "custom" ? !task.customComment : !task.postText),
+      ) ||
       config.generatedTaskComments.length !== tasks.length)
 
   return (
