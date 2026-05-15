@@ -31,7 +31,11 @@ export default function AdminPage() {
     return tasks.filter(
       (task) =>
         task.redditUrl.trim() &&
-        (task.commentMode === "custom" ? task.customComment.trim() : task.postText.trim()),
+        (task.commentMode === "custom"
+          ? task.customComment.trim()
+          : task.commentMode === "freeform"
+            ? true
+            : task.postText.trim()),
     ).length
   }, [tasks])
   const canGenerate = tasks.length > 0 && completedCount === tasks.length && status.kind !== "saving" && status.kind !== "generating"
@@ -201,11 +205,19 @@ export default function AdminPage() {
               <label className="mt-4 block text-sm font-medium">Comment source</label>
               <select
                 value={task.commentMode}
-                onChange={(event) => updateTask(index, { commentMode: event.target.value === "custom" ? "custom" : "ai" })}
+                onChange={(event) =>
+                  updateTask(index, {
+                    commentMode:
+                      event.target.value === "custom" || event.target.value === "freeform"
+                        ? event.target.value
+                        : "ai",
+                  })
+                }
                 className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
               >
                 <option value="ai">AI-generated comments</option>
                 <option value="custom">Custom admin comment</option>
+                <option value="freeform">No preset comment</option>
               </select>
 
               {task.commentMode === "custom" && (

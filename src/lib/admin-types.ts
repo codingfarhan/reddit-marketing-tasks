@@ -4,7 +4,7 @@ export type AdminRedditTask = {
   id: string
   redditUrl: string
   postText: string
-  commentMode: "ai" | "custom"
+  commentMode: "ai" | "custom" | "freeform"
   customComment: string
 }
 

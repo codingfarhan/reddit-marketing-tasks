@@ -37,6 +37,7 @@ const COMMENT_RESPONSE_FORMAT = {
 function validateTask(task: AdminRedditTask) {
   if (!task.redditUrl.trim()) return false
   if (task.commentMode === "custom") return Boolean(task.customComment.trim())
+  if (task.commentMode === "freeform") return true
   if (!task.postText.trim()) return false
 
   try {
@@ -154,6 +155,14 @@ async function requestPersonaComments(client: OpenAI, task: AdminRedditTask, per
 }
 
 async function generateForTask(client: OpenAI, task: AdminRedditTask): Promise<GeneratedTaskComments> {
+  if (task.commentMode === "freeform") {
+    return {
+      taskId: task.id,
+      redditUrl: task.redditUrl,
+      comments: [],
+    }
+  }
+
   if (task.commentMode === "custom") {
     const comment = normalizeGeneratedComment(task.customComment)
     return {
@@ -211,8 +220,9 @@ export async function POST() {
     })
 
     const generatedTaskComments: GeneratedTaskComments[] = []
-    for (let index = 0; index < tasks.length; index += GENERATION_CONCURRENCY) {
-      const chunk = tasks.slice(index, index + GENERATION_CONCURRENCY)
+    const commentTasks = tasks.filter((task) => task.commentMode !== "freeform")
+    for (let index = 0; index < commentTasks.length; index += GENERATION_CONCURRENCY) {
+      const chunk = commentTasks.slice(index, index + GENERATION_CONCURRENCY)
       generatedTaskComments.push(...(await Promise.all(chunk.map((task) => generateForTask(client, task)))))
     }
 

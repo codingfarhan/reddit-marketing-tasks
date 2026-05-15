@@ -67,10 +67,18 @@ export async function POST(request: Request) {
         (task) =>
           task.id &&
           task.redditUrl.trim() &&
-          (task.commentMode === "custom" ? task.customComment.trim() : task.postText.trim()) &&
+          (task.commentMode === "custom"
+            ? task.customComment.trim()
+            : task.commentMode === "freeform"
+              ? true
+              : task.postText.trim()) &&
           isValidHttpUrl(task.redditUrl),
       ) &&
-      config.generatedTaskComments.length === configuredTasks.length
+      configuredTasks.every(
+        (task) =>
+          task.commentMode === "freeform" ||
+          Boolean(config.generatedTaskComments.find((item) => item.taskId === task.id)),
+      )
 
     if (!hasValidSetup) {
       return Response.json({ error: "Admin setup is incomplete. Add tasks and generate comments first." }, { status: 400 })

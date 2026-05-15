@@ -16,7 +16,7 @@ function normalizeTasks(tasks: AdminRedditTask[]): AdminRedditTask[] {
       id,
       redditUrl: String(task?.redditUrl ?? "").trim(),
       postText: String(task?.postText ?? "").trim(),
-      commentMode: task?.commentMode === "custom" ? "custom" : "ai",
+      commentMode: task?.commentMode === "custom" || task?.commentMode === "freeform" ? task.commentMode : "ai",
       customComment: String(task?.customComment ?? "").trim(),
     }
   })

@@ -272,9 +272,18 @@ export default function Home() {
     (tasks.length === 0 ||
       tasks.some(
         (task) =>
-          !task.redditUrl || (task.commentMode === "custom" ? !task.customComment : !task.postText),
+          !task.redditUrl ||
+          (task.commentMode === "custom"
+            ? !task.customComment
+            : task.commentMode === "freeform"
+              ? false
+              : !task.postText),
       ) ||
-      config.generatedTaskComments.length !== tasks.length)
+      tasks.some(
+        (task) =>
+          task.commentMode !== "freeform" &&
+          !config.generatedTaskComments.find((item) => item.taskId === task.id),
+      ))
 
   return (
     <main className="min-h-dvh bg-zinc-50 px-4 py-6 text-zinc-950">
@@ -383,24 +392,32 @@ export default function Home() {
                     {activeTask.redditUrl}
                   </a>
                 </div>
-                <button
-                  type="button"
-                  onClick={copyComment}
-                  disabled={!activeGeneratedComment}
-                  className={`shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                    copied ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
-                  }`}
-                >
-                  {copied ? "Copied" : "Copy"}
-                </button>
+                {activeTask.commentMode !== "freeform" && (
+                  <button
+                    type="button"
+                    onClick={copyComment}
+                    disabled={!activeGeneratedComment}
+                    className={`shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      copied ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-zinc-200 bg-white text-zinc-900 hover:bg-zinc-50"
+                    }`}
+                  >
+                    {copied ? "Copied" : "Copy"}
+                  </button>
+                )}
               </div>
 
-              <textarea
-                value={activeGeneratedComment}
-                readOnly
-                rows={5}
-                className="mt-4 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-800 outline-none"
-              />
+              {activeTask.commentMode === "freeform" ? (
+                <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">
+                  Write any comment you think fits this post.
+                </p>
+              ) : (
+                <textarea
+                  value={activeGeneratedComment}
+                  readOnly
+                  rows={5}
+                  className="mt-4 w-full resize-none rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-sm text-zinc-800 outline-none"
+                />
+              )}
 
               <label className="mt-4 block text-sm font-medium">Reddit comment URL</label>
               <input

@@ -36,7 +36,7 @@ export async function readAdminConfig(): Promise<AdminConfig> {
       id: task.id,
       redditUrl: task.redditUrl,
       postText: task.postText,
-      commentMode: task.commentMode === "custom" ? "custom" : "ai",
+      commentMode: task.commentMode === "custom" || task.commentMode === "freeform" ? task.commentMode : "ai",
       customComment: task.customComment,
     })),
     generatedTaskComments,
