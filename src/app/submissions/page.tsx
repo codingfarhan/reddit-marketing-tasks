@@ -1,4 +1,5 @@
 import { readAdminConfig } from "@/lib/admin-storage"
+import { commentPersonas } from "@/lib/personas"
 import { readSubmissions, type SavedSubmission } from "@/lib/submissions-db"
 
 export const runtime = "nodejs"
@@ -13,6 +14,8 @@ export default async function SubmissionsPage() {
     if (!existing || existing.submittedAt < meta.submittedAt) latestByName.set(key, meta)
   }
   const rows = Array.from(latestByName.values()).sort((a, b) => (a.submittedAt < b.submittedAt ? 1 : -1))
+  const submittedPersonaIds = new Set(rows.map((row) => row.personaId))
+  const missingPersonas = commentPersonas.filter((persona) => !submittedPersonaIds.has(persona.id))
   const commentUrlCount = rows.reduce((total, meta) => total + (meta.tasks?.length ?? 0), 0)
   const adminColumns = adminConfig.tasks.map((task, index) => ({
     id: task.id,
@@ -32,7 +35,22 @@ export default async function SubmissionsPage() {
       <div className="mx-auto w-full max-w-6xl px-4 py-8">
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h1 className="text-lg font-semibold tracking-tight">Submissions</h1>
-            <p className="mt-1 text-sm text-zinc-600">Reading submissions from the database.</p>
+          <p className="mt-1 text-sm text-zinc-600">Reading submissions from the database.</p>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <h2 className="text-sm font-semibold">Not submitted yet</h2>
+          {missingPersonas.length === 0 ? (
+            <p className="mt-2 text-sm text-zinc-600">Everyone has submitted.</p>
+          ) : (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {missingPersonas.map((persona) => (
+                <span key={persona.id} className="rounded-full bg-zinc-100 px-3 py-1 text-sm text-zinc-700">
+                  {persona.name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white shadow-sm">
