@@ -7,7 +7,6 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 const GENERATION_CONCURRENCY = 3
-const MAX_COMMENT_LENGTH = 350
 const COMMENT_RESPONSE_FORMAT = {
   type: "json_schema",
   name: "persona_comments",
@@ -68,15 +67,13 @@ function parseGeneratedComments(output: string) {
 }
 
 function normalizeGeneratedComment(value: string) {
-  const normalized = value
+  return value
     .trim()
     .toLowerCase()
     .replace(/—/g, ", ")
     .replace(/\bquietly\b|\bsilently\b|\blol\b/g, "")
     .replace(/\s+/g, " ")
     .trim()
-  if (normalized.length <= MAX_COMMENT_LENGTH) return normalized
-  return normalized.slice(0, MAX_COMMENT_LENGTH).trimEnd()
 }
 
 function buildPersonaBrief(personas = commentPersonas) {
