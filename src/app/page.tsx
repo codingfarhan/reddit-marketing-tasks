@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { AdminConfig } from "@/lib/admin-types"
+import { getTasksForPersona } from "@/lib/persona-groups"
 import { commentPersonas } from "@/lib/personas"
 
 type Step = "name" | "reddit" | "tasks" | "done"
@@ -90,6 +91,7 @@ export default function Home() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionId, setSubmissionId] = useState<string | null>(null)
+  const [countdown, setCountdown] = useState<number | null>(null)
   const copyTimer = useRef<number | null>(null)
   const hasLoadedProgress = useRef(false)
 
@@ -108,7 +110,8 @@ export default function Home() {
           setNameQuery(saved.nameQuery)
           setSelectedPersonaId(saved.selectedPersonaId)
           setRedditUsername(saved.redditUsername)
-          setTaskIndex(Math.min(Math.max(saved.taskIndex, 0), Math.max(data.tasks.length - 1, 0)))
+          const savedPersonaTasks = saved.selectedPersonaId ? getTasksForPersona(data.tasks, saved.selectedPersonaId) : []
+          setTaskIndex(Math.min(Math.max(saved.taskIndex, 0), Math.max(savedPersonaTasks.length - 1, 0)))
           setCommentUrlByTaskId(saved.commentUrlByTaskId)
         }
         hasLoadedProgress.current = true
@@ -143,14 +146,33 @@ export default function Home() {
     )
   }, [commentUrlByTaskId, config, nameQuery, redditUsername, selectedPersonaId, step, taskIndex])
 
+  useEffect(() => {
+    if (countdown === null) return
+
+    const timer = window.setTimeout(() => {
+      setCountdown((current) => {
+        if (current === null) return null
+        if (current <= 1) {
+          setTaskIndex((task) => task + 1)
+          setCopied(false)
+          return null
+        }
+        return current - 1
+      })
+    }, 1000)
+    return () => window.clearTimeout(timer)
+  }, [countdown])
+
   const selectedPersona = commentPersonas.find((persona) => persona.id === selectedPersonaId) ?? null
-  const tasks = config?.tasks ?? []
+  const allTasks = config?.tasks ?? []
+  const tasks = selectedPersona ? getTasksForPersona(allTasks, selectedPersona.id) : []
   const activeTask = tasks[taskIndex] ?? null
-  const activeGeneratedComment = useMemo(() => {
-    if (!activeTask || !selectedPersona || !config) return ""
-    const taskComments = config.generatedTaskComments.find((item) => item.taskId === activeTask.id)
-    return taskComments?.comments.find((comment) => comment.personaId === selectedPersona.id)?.comment ?? ""
-  }, [activeTask, config, selectedPersona])
+  const activeGeneratedComment =
+    activeTask && selectedPersona && config
+      ? config.generatedTaskComments
+          .find((item) => item.taskId === activeTask.id)
+          ?.comments.find((comment) => comment.personaId === selectedPersona.id)?.comment ?? ""
+      : ""
   const filteredPersonas = useMemo(() => {
     const query = nameQuery.trim().toLowerCase()
     if (!query) return []
@@ -165,6 +187,7 @@ export default function Home() {
     if (!persona) return
     setSelectedPersonaId(persona.id)
     setNameQuery(persona.name)
+    setTaskIndex(0)
     setSubmitError(null)
   }
 
@@ -254,8 +277,7 @@ export default function Home() {
       return
     }
     setSubmitError(null)
-    setTaskIndex((current) => current + 1)
-    setCopied(false)
+    setCountdown(30)
   }
 
   async function copyComment() {
@@ -269,8 +291,8 @@ export default function Home() {
   const setupIncomplete =
     !loadError &&
     config &&
-    (tasks.length === 0 ||
-      tasks.some(
+    (allTasks.length === 0 ||
+      allTasks.some(
         (task) =>
           !task.redditUrl ||
           (task.commentMode === "custom"
@@ -279,7 +301,7 @@ export default function Home() {
               ? false
               : !task.postText),
       ) ||
-      tasks.some(
+      allTasks.some(
         (task) =>
           task.commentMode !== "freeform" &&
           !config.generatedTaskComments.find((item) => item.taskId === task.id),
@@ -441,7 +463,7 @@ export default function Home() {
                     else setTaskIndex((current) => current - 1)
                     setSubmitError(null)
                   }}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || countdown !== null}
                   className="rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   Back
@@ -452,12 +474,20 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={goNextTask}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || countdown !== null}
                   className="rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {taskIndex === tasks.length - 1 ? (isSubmitting ? "Submitting..." : "Submit") : "Next"}
                 </button>
               </div>
+
+              {countdown !== null && (
+                <div className="mt-5 rounded-2xl bg-zinc-900 px-4 py-6 text-center text-white">
+                  <p className="text-sm text-zinc-300">Waiting before the next task to help prevent Reddit rate limits</p>
+                  <p className="mt-2 text-6xl font-semibold tabular-nums">{countdown}</p>
+                  <p className="mt-2 text-sm text-zinc-300">seconds</p>
+                </div>
+              )}
             </div>
           )}
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import type { AdminConfig, AdminRedditTask } from "@/lib/admin-types"
+import { getTaskGroup } from "@/lib/persona-groups"
 
 type Status = {
   kind: "idle" | "loading" | "saving" | "generating" | "success" | "error"
@@ -106,15 +107,15 @@ export default function AdminPage() {
   }
 
   async function generateComments() {
-    setStatus({ kind: "generating", message: `Generating comments for 15 personas across ${tasks.length} tasks. This can take a bit...` })
+    setStatus({ kind: "generating", message: `Generating comments for assigned persona groups across ${tasks.length} tasks. This can take a bit...` })
     try {
       await saveTasks()
-      setStatus({ kind: "generating", message: `Generating comments for 15 personas across ${tasks.length} tasks. This can take a bit...` })
+      setStatus({ kind: "generating", message: `Generating comments for assigned persona groups across ${tasks.length} tasks. This can take a bit...` })
       const res = await fetch("/api/admin/generate", { method: "POST" })
       const data = (await res.json()) as { generatedAt?: string; error?: string }
       if (!res.ok) throw new Error(data.error || "Failed to generate comments")
       setGeneratedAt(data.generatedAt ?? new Date().toISOString())
-      setStatus({ kind: "success", message: `Generated comments for all 15 personas and ${tasks.length} task${tasks.length === 1 ? "" : "s"}.` })
+      setStatus({ kind: "success", message: `Generated comments for assigned persona groups across ${tasks.length} task${tasks.length === 1 ? "" : "s"}.` })
     } catch (err) {
       setStatus({ kind: "error", message: err instanceof Error ? err.message : "Failed to generate comments" })
     }
@@ -168,7 +169,9 @@ export default function AdminPage() {
           {tasks.map((task, index) => (
             <div key={task.id} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold">Task {index + 1}</h2>
+                <h2 className="text-sm font-semibold">
+                  Task {index + 1} <span className="text-zinc-500">• {getTaskGroup(index, tasks.length) === "group_1" ? "Group 1" : "Group 2"}</span>
+                </h2>
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-xs text-zinc-500">{task.id}</span>
                   {tasks.length > 1 && (

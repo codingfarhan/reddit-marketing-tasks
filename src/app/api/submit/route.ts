@@ -1,4 +1,5 @@
 import { readAdminConfig } from "@/lib/admin-storage"
+import { getTasksForPersona } from "@/lib/persona-groups"
 import { commentPersonas } from "@/lib/personas"
 import { saveSubmission } from "@/lib/submissions-db"
 
@@ -60,10 +61,11 @@ export async function POST(request: Request) {
     if (!persona) return Response.json({ error: "Select a valid name from the dropdown" }, { status: 400 })
 
     const config = await readAdminConfig()
-    const configuredTasks = config.tasks
+    const allConfiguredTasks = config.tasks
+    const configuredTasks = getTasksForPersona(allConfiguredTasks, personaId)
     const hasValidSetup =
       configuredTasks.length > 0 &&
-      configuredTasks.every(
+      allConfiguredTasks.every(
         (task) =>
           task.id &&
           task.redditUrl.trim() &&
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
               : task.postText.trim()) &&
           isValidHttpUrl(task.redditUrl),
       ) &&
-      configuredTasks.every(
+      allConfiguredTasks.every(
         (task) =>
           task.commentMode === "freeform" ||
           Boolean(config.generatedTaskComments.find((item) => item.taskId === task.id)),

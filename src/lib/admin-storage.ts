@@ -1,6 +1,5 @@
 import { emptyAdminConfig, type AdminConfig } from "@/lib/admin-types"
 import { prisma } from "@/lib/db"
-import { commentPersonas } from "@/lib/personas"
 
 export async function readAdminConfig(): Promise<AdminConfig> {
   const fallback = emptyAdminConfig()
@@ -21,14 +20,11 @@ export async function readAdminConfig(): Promise<AdminConfig> {
     .map((task) => ({
       taskId: task.id,
       redditUrl: task.redditUrl,
-      comments: commentPersonas.map((persona) => {
-        const generated = task.generatedComments.find((comment) => comment.personaId === persona.id)
-        return {
-          personaId: persona.id,
-          name: persona.name,
-          comment: generated?.comment ?? "",
-        }
-      }),
+      comments: task.generatedComments.map((comment) => ({
+        personaId: comment.personaId,
+        name: comment.personaName,
+        comment: comment.comment,
+      })),
     }))
 
   return {
