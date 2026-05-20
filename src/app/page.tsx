@@ -109,6 +109,13 @@ function getVisibleTasks(config: AdminConfig, personaId: string) {
   return warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(config.tasks, personaId)
 }
 
+function isNewlyAddedPersona(personaId: string) {
+  const match = personaId.match(/^persona_(\d+)$/)
+  if (!match) return false
+  const personaNumber = Number(match[1])
+  return personaNumber >= 16 && personaNumber <= 30
+}
+
 export default function Home() {
   const [config, setConfig] = useState<AdminConfig | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -220,6 +227,7 @@ export default function Home() {
 
   useEffect(() => {
     if (step !== "tasks" || warmupDay !== 1 || taskIndex !== 0 || !selectedPersonaId) return
+    if (isNewlyAddedPersona(selectedPersonaId)) return
 
     const noticeKey = `${selectedPersonaId}:warmup-day-1`
     if (warmupNoticeKey.current === noticeKey) return
