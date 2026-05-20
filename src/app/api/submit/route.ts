@@ -10,6 +10,7 @@ type SavedTask = {
   taskId: string
   redditUrl: string
   postText: string
+  taskType: string
   generatedComment: string | null
   commentUrl: string
 }
@@ -44,6 +45,23 @@ function isValidHttpUrl(value: string) {
   }
 }
 
+function getIstDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date)
+}
+
+function getWarmupDay(startDate: string) {
+  if (!startDate) return null
+  const today = new Date(`${getIstDateKey()}T00:00:00.000+05:30`).getTime()
+  const start = new Date(`${startDate}T00:00:00.000+05:30`).getTime()
+  const day = Math.floor((today - start) / 86_400_000) + 1
+  return day >= 1 && day <= 7 ? day : null
+}
+
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Body
@@ -61,15 +79,19 @@ export async function POST(request: Request) {
     if (!persona) return Response.json({ error: "Select a valid name from the dropdown" }, { status: 400 })
 
     const config = await readAdminConfig()
-    const allConfiguredTasks = config.tasks
-    const configuredTasks = getTasksForPersona(allConfiguredTasks, personaId)
+    const allConfiguredTasks = [...config.tasks, ...config.warmupTasks.flat()]
+    const personaSetting = config.personaSettings.find((setting) => setting.personaId === personaId)
+    const warmupDay = personaSetting?.status === "warmup" ? getWarmupDay(personaSetting.warmupStartDate) : null
+    const configuredTasks = warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(config.tasks, personaId)
     const hasValidSetup =
       configuredTasks.length > 0 &&
       allConfiguredTasks.every(
         (task) =>
           task.id &&
           task.redditUrl.trim() &&
-          (task.commentMode === "custom"
+          (task.taskType !== "comment"
+            ? true
+            : task.commentMode === "custom"
             ? task.customComment.trim()
             : task.commentMode === "freeform"
               ? true
@@ -78,6 +100,7 @@ export async function POST(request: Request) {
       ) &&
       allConfiguredTasks.every(
         (task) =>
+          task.taskType !== "comment" ||
           task.commentMode === "freeform" ||
           Boolean(config.generatedTaskComments.find((item) => item.taskId === task.id)),
       )
@@ -99,6 +122,7 @@ export async function POST(request: Request) {
         taskId: task.id,
         redditUrl: task.redditUrl,
         postText: task.postText,
+        taskType: task.taskType,
         generatedComment,
         commentUrl,
       }
@@ -106,10 +130,13 @@ export async function POST(request: Request) {
 
     const missing = savedTasks.find((task) => !task.commentUrl)
     if (missing) {
-      return Response.json({ error: `Missing Reddit comment URL for ${missing.taskId}` }, { status: 400 })
+      return Response.json(
+        { error: missing.taskType === "comment" ? `Missing Reddit comment URL for ${missing.taskId}` : `Missing screenshot for ${missing.taskId}` },
+        { status: 400 },
+      )
     }
 
-    const invalid = savedTasks.find((task) => !isValidHttpUrl(task.commentUrl))
+    const invalid = savedTasks.find((task) => task.taskType === "comment" && !isValidHttpUrl(task.commentUrl))
     if (invalid) {
       return Response.json({ error: `Invalid Reddit comment URL for ${invalid.taskId}` }, { status: 400 })
     }

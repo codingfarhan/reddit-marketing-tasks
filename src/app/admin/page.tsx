@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import type { AdminConfig, AdminRedditTask } from "@/lib/admin-types"
+import type { AdminConfig, AdminRedditTask, PersonaSetting } from "@/lib/admin-types"
 import { getTaskGroup } from "@/lib/persona-groups"
+import { commentPersonas } from "@/lib/personas"
 
 type Status = {
   kind: "idle" | "loading" | "saving" | "generating" | "success" | "error"
@@ -18,28 +19,65 @@ function createTask(index: number): AdminRedditTask {
     id: `task-${String(index + 1).padStart(2, "0")}`,
     redditUrl: "",
     postText: "",
+    taskType: "comment",
     commentMode: "ai",
     customComment: "",
+    taskCategory: "marketing",
+    warmupDay: null,
+  }
+}
+
+function createWarmupTask(day: number, index: number): AdminRedditTask {
+  return {
+    ...createTask(index),
+    id: `warmup-day-${day}-task-${String(index + 1).padStart(2, "0")}`,
+    taskCategory: "warmup",
+    warmupDay: day,
+  }
+}
+
+function defaultPersonaSettings(): PersonaSetting[] {
+  return commentPersonas.map((persona) => ({
+    personaId: persona.id,
+    status: "marketing",
+    warmupStartDate: "",
+  }))
+}
+
+async function readJsonResponse<T>(res: Response): Promise<T & { error?: string }> {
+  const text = await res.text()
+  if (!text) return {} as T & { error?: string }
+
+  try {
+    return JSON.parse(text) as T & { error?: string }
+  } catch {
+    return { error: text } as T & { error?: string }
   }
 }
 
 export default function AdminPage() {
   const [tasks, setTasks] = useState<AdminRedditTask[]>(createEmptyTasks)
+  const [warmupTasks, setWarmupTasks] = useState<AdminRedditTask[][]>(Array.from({ length: 7 }, () => []))
+  const [personaSettings, setPersonaSettings] = useState<PersonaSetting[]>(defaultPersonaSettings)
   const [generatedAt, setGeneratedAt] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>({ kind: "loading", message: "Loading tasks..." })
 
   const completedCount = useMemo(() => {
-    return tasks.filter(
+    const allTasks = [...tasks, ...warmupTasks.flat()]
+    return allTasks.filter(
       (task) =>
         task.redditUrl.trim() &&
-        (task.commentMode === "custom"
+        (task.taskType !== "comment"
+          ? true
+          : task.commentMode === "custom"
           ? task.customComment.trim()
           : task.commentMode === "freeform"
             ? true
             : task.postText.trim()),
     ).length
-  }, [tasks])
-  const canGenerate = tasks.length > 0 && completedCount === tasks.length && status.kind !== "saving" && status.kind !== "generating"
+  }, [tasks, warmupTasks])
+  const totalTaskCount = tasks.length + warmupTasks.flat().length
+  const canGenerate = totalTaskCount > 0 && completedCount === totalTaskCount && status.kind !== "saving" && status.kind !== "generating"
 
   useEffect(() => {
     let alive = true
@@ -51,6 +89,8 @@ export default function AdminPage() {
         if (!res.ok) throw new Error(data.error || "Failed to load admin tasks")
         if (!alive) return
         setTasks(Array.isArray(data.tasks) && data.tasks.length > 0 ? data.tasks : createEmptyTasks())
+        setWarmupTasks(Array.isArray(data.warmupTasks) ? data.warmupTasks : Array.from({ length: 7 }, () => []))
+        setPersonaSettings(Array.isArray(data.personaSettings) && data.personaSettings.length > 0 ? data.personaSettings : defaultPersonaSettings())
         setGeneratedAt(data.generatedAt)
         setStatus({ kind: "idle", message: "" })
       } catch (err) {
@@ -71,6 +111,16 @@ export default function AdminPage() {
     )
   }
 
+  function updateWarmupTask(dayIndex: number, taskIndex: number, patch: Partial<AdminRedditTask>) {
+    setWarmupTasks((prev) =>
+      prev.map((dayTasks, currentDayIndex) =>
+        currentDayIndex === dayIndex
+          ? dayTasks.map((task, currentTaskIndex) => (currentTaskIndex === taskIndex ? { ...task, ...patch } : task))
+          : dayTasks,
+      ),
+    )
+  }
+
   function addTask() {
     setTasks((prev) => [...prev, createTask(prev.length)])
     setGeneratedAt(null)
@@ -86,17 +136,52 @@ export default function AdminPage() {
     setGeneratedAt(null)
   }
 
+  function addWarmupTask(dayIndex: number) {
+    setWarmupTasks((prev) =>
+      prev.map((dayTasks, currentDayIndex) =>
+        currentDayIndex === dayIndex ? [...dayTasks, createWarmupTask(dayIndex + 1, dayTasks.length)] : dayTasks,
+      ),
+    )
+  }
+
+  function removeWarmupTask(dayIndex: number, taskIndex: number) {
+    setWarmupTasks((prev) =>
+      prev.map((dayTasks, currentDayIndex) =>
+        currentDayIndex === dayIndex
+          ? dayTasks
+              .filter((_, currentTaskIndex) => currentTaskIndex !== taskIndex)
+              .map((task, currentTaskIndex) => ({
+                ...task,
+                id: `warmup-day-${dayIndex + 1}-task-${String(currentTaskIndex + 1).padStart(2, "0")}`,
+              }))
+          : dayTasks,
+      ),
+    )
+  }
+
+  function updatePersonaSetting(personaId: string, patch: Partial<PersonaSetting>) {
+    setPersonaSettings((prev) =>
+      prev.map((setting) => (setting.personaId === personaId ? { ...setting, ...patch } : setting)),
+    )
+  }
+
   async function saveTasks() {
     setStatus({ kind: "saving", message: "Saving tasks..." })
     try {
       const res = await fetch("/api/admin/tasks", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tasks }),
+        body: JSON.stringify({ tasks, warmupTasks, personaSettings }),
       })
-      const data = (await res.json()) as { tasks?: AdminRedditTask[]; error?: string }
+      const data = await readJsonResponse<{
+        tasks?: AdminRedditTask[]
+        warmupTasks?: AdminRedditTask[][]
+        personaSettings?: PersonaSetting[]
+      }>(res)
       if (!res.ok) throw new Error(data.error || "Failed to save tasks")
       if (data.tasks) setTasks(data.tasks)
+      if (data.warmupTasks) setWarmupTasks(data.warmupTasks)
+      if (data.personaSettings) setPersonaSettings(data.personaSettings)
       setGeneratedAt(null)
       setStatus({ kind: "success", message: "Tasks saved. Generated comments were reset." })
       return data.tasks ?? tasks
@@ -107,15 +192,15 @@ export default function AdminPage() {
   }
 
   async function generateComments() {
-    setStatus({ kind: "generating", message: `Generating comments for assigned persona groups across ${tasks.length} tasks. This can take a bit...` })
+    setStatus({ kind: "generating", message: `Generating comments across ${totalTaskCount} tasks. This can take a bit...` })
     try {
       await saveTasks()
-      setStatus({ kind: "generating", message: `Generating comments for assigned persona groups across ${tasks.length} tasks. This can take a bit...` })
+      setStatus({ kind: "generating", message: `Generating comments across ${totalTaskCount} tasks. This can take a bit...` })
       const res = await fetch("/api/admin/generate", { method: "POST" })
       const data = (await res.json()) as { generatedAt?: string; error?: string }
       if (!res.ok) throw new Error(data.error || "Failed to generate comments")
       setGeneratedAt(data.generatedAt ?? new Date().toISOString())
-      setStatus({ kind: "success", message: `Generated comments for assigned persona groups across ${tasks.length} task${tasks.length === 1 ? "" : "s"}.` })
+      setStatus({ kind: "success", message: `Generated comments across ${totalTaskCount} task${totalTaskCount === 1 ? "" : "s"}.` })
     } catch (err) {
       setStatus({ kind: "error", message: err instanceof Error ? err.message : "Failed to generate comments" })
     }
@@ -154,7 +239,7 @@ export default function AdminPage() {
         <section className="mt-5 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
           <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm font-semibold">
-              {completedCount}/{tasks.length} task{tasks.length === 1 ? "" : "s"} complete
+              {completedCount}/{totalTaskCount} task{totalTaskCount === 1 ? "" : "s"} complete
             </p>
             {generatedAt && <p className="text-xs text-zinc-600">Generated at {new Date(generatedAt).toLocaleString()}</p>}
           </div>
@@ -205,34 +290,56 @@ export default function AdminPage() {
                 className="mt-2 w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
               />
 
-              <label className="mt-4 block text-sm font-medium">Comment source</label>
+              <label className="mt-4 block text-sm font-medium">Task type</label>
               <select
-                value={task.commentMode}
+                value={task.taskType}
                 onChange={(event) =>
                   updateTask(index, {
-                    commentMode:
-                      event.target.value === "custom" || event.target.value === "freeform"
+                    taskType:
+                      event.target.value === "upvote" || event.target.value === "join_subreddit"
                         ? event.target.value
-                        : "ai",
+                        : "comment",
                   })
                 }
                 className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
               >
-                <option value="ai">AI-generated comments</option>
-                <option value="custom">Custom admin comment</option>
-                <option value="freeform">No preset comment</option>
+                <option value="comment">Comment task</option>
+                <option value="upvote">Upvote this post</option>
+                <option value="join_subreddit">Join a subreddit</option>
               </select>
 
-              {task.commentMode === "custom" && (
+              {task.taskType === "comment" && (
                 <>
-                  <label className="mt-4 block text-sm font-medium">Custom comment</label>
-                  <textarea
-                    value={task.customComment}
-                    onChange={(event) => updateTask(index, { customComment: event.target.value })}
-                    rows={4}
-                    placeholder="This same comment will be shown for every persona on this task"
-                    className="mt-2 w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
-                  />
+                  <label className="mt-4 block text-sm font-medium">Comment source</label>
+                  <select
+                    value={task.commentMode}
+                    onChange={(event) =>
+                      updateTask(index, {
+                        commentMode:
+                          event.target.value === "custom" || event.target.value === "freeform"
+                            ? event.target.value
+                            : "ai",
+                      })
+                    }
+                    className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
+                  >
+                    <option value="ai">AI-generated comments</option>
+                    <option value="custom">Custom admin comment</option>
+                    <option value="freeform">No preset comment</option>
+                  </select>
+
+                  {task.commentMode === "custom" && (
+                    <>
+                      <label className="mt-4 block text-sm font-medium">Custom comment</label>
+                      <textarea
+                        value={task.customComment}
+                        onChange={(event) => updateTask(index, { customComment: event.target.value })}
+                        rows={4}
+                        placeholder="This same comment will be shown for every persona on this task"
+                        className="mt-2 w-full resize-y rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
+                      />
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -246,6 +353,137 @@ export default function AdminPage() {
           >
             Add task
           </button>
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold">Persona warmup status</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {commentPersonas.map((persona) => {
+              const setting = personaSettings.find((item) => item.personaId === persona.id) ?? {
+                personaId: persona.id,
+                status: "marketing" as const,
+                warmupStartDate: "",
+              }
+
+              return (
+                <div key={persona.id} className="rounded-xl border border-zinc-200 p-3">
+                  <p className="text-sm font-semibold">{persona.name}</p>
+                  <select
+                    value={setting.status}
+                    onChange={(event) =>
+                      updatePersonaSetting(persona.id, {
+                        status: event.target.value === "warmup" ? "warmup" : "marketing",
+                      })
+                    }
+                    className="mt-2 w-full rounded-lg border border-zinc-200 px-2 py-2 text-sm"
+                  >
+                    <option value="marketing">Ready for marketing tasks</option>
+                    <option value="warmup">Account warmup</option>
+                  </select>
+                  {setting.status === "warmup" && (
+                    <input
+                      type="date"
+                      value={setting.warmupStartDate}
+                      onChange={(event) => updatePersonaSetting(persona.id, { warmupStartDate: event.target.value })}
+                      className="mt-2 w-full rounded-lg border border-zinc-200 px-2 py-2 text-sm"
+                    />
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </section>
+
+        <section className="mt-8 space-y-5">
+          <h2 className="text-lg font-semibold">7 day account warmup tasks</h2>
+          {warmupTasks.map((dayTasks, dayIndex) => (
+            <div key={dayIndex} className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
+              <h3 className="text-sm font-semibold">Day {dayIndex + 1}</h3>
+              <div className="mt-4 space-y-4">
+                {dayTasks.map((task, taskIndex) => (
+                  <div key={task.id} className="rounded-xl border border-zinc-200 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold">Task {taskIndex + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeWarmupTask(dayIndex, taskIndex)}
+                        className="text-xs font-semibold text-red-700"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <input
+                      value={task.redditUrl}
+                      onChange={(event) => updateWarmupTask(dayIndex, taskIndex, { redditUrl: event.target.value })}
+                      placeholder="reddit link or subreddit link"
+                      className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm"
+                    />
+                    <textarea
+                      value={task.postText}
+                      onChange={(event) => updateWarmupTask(dayIndex, taskIndex, { postText: event.target.value })}
+                      rows={3}
+                      placeholder="post text or instruction"
+                      className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm"
+                    />
+                    <select
+                      value={task.taskType}
+                      onChange={(event) =>
+                        updateWarmupTask(dayIndex, taskIndex, {
+                          taskType:
+                            event.target.value === "upvote" || event.target.value === "join_subreddit"
+                              ? event.target.value
+                              : "comment",
+                        })
+                      }
+                      className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm"
+                    >
+                      <option value="comment">Comment task</option>
+                      <option value="upvote">Upvote this post</option>
+                      <option value="join_subreddit">Join a subreddit</option>
+                    </select>
+
+                    {task.taskType === "comment" && (
+                      <>
+                        <select
+                          value={task.commentMode}
+                          onChange={(event) =>
+                            updateWarmupTask(dayIndex, taskIndex, {
+                              commentMode:
+                                event.target.value === "custom" || event.target.value === "freeform"
+                                  ? event.target.value
+                                  : "ai",
+                            })
+                          }
+                          className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm"
+                        >
+                          <option value="ai">AI-generated comments</option>
+                          <option value="custom">Custom admin comment</option>
+                          <option value="freeform">No preset comment</option>
+                        </select>
+
+                        {task.commentMode === "custom" && (
+                          <textarea
+                            value={task.customComment}
+                            onChange={(event) => updateWarmupTask(dayIndex, taskIndex, { customComment: event.target.value })}
+                            rows={3}
+                            placeholder="custom comment for this warmup task"
+                            className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm"
+                          />
+                        )}
+                      </>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addWarmupTask(dayIndex)}
+                  className="w-full rounded-xl border border-dashed border-zinc-300 px-4 py-3 text-sm font-semibold"
+                >
+                  Add day {dayIndex + 1} task
+                </button>
+              </div>
+            </div>
+          ))}
         </section>
       </div>
     </main>

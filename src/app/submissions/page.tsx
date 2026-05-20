@@ -17,18 +17,29 @@ export default async function SubmissionsPage() {
   const submittedPersonaIds = new Set(rows.map((row) => row.personaId))
   const missingPersonas = commentPersonas.filter((persona) => !submittedPersonaIds.has(persona.id))
   const commentUrlCount = rows.reduce((total, meta) => total + (meta.tasks?.length ?? 0), 0)
-  const adminColumns = adminConfig.tasks.map((task, index) => ({
-    id: task.id,
-    label: `Task ${index + 1}`,
-  }))
+  const adminColumns = [
+    ...adminConfig.tasks.map((task, index) => ({
+      id: task.id,
+      label: `Task ${index + 1}`,
+    })),
+    ...adminConfig.warmupTasks.flatMap((dayTasks, dayIndex) =>
+      dayTasks.map((task, taskIndex) => ({
+        id: task.id,
+        label: `Warmup D${dayIndex + 1}.${taskIndex + 1}`,
+      })),
+    ),
+  ]
   const savedTaskIds = Array.from(new Set(rows.flatMap((row) => row.tasks.map((task) => task.taskId))))
-  const taskColumns =
-    adminColumns.length > 0
-      ? adminColumns
-      : savedTaskIds.map((taskId, index) => ({
-          id: taskId,
-          label: `Task ${index + 1}`,
-        }))
+  const adminColumnIds = new Set(adminColumns.map((task) => task.id))
+  const taskColumns = [
+    ...adminColumns,
+    ...savedTaskIds
+      .filter((taskId) => !adminColumnIds.has(taskId))
+      .map((taskId, index) => ({
+        id: taskId,
+        label: `Saved ${index + 1}`,
+      })),
+  ]
 
   return (
     <div className="min-h-dvh bg-zinc-50 text-zinc-950">
@@ -110,6 +121,8 @@ export default async function SubmissionsPage() {
                               >
                                 {commentUrl}
                               </a>
+                            ) : commentUrl ? (
+                              <span className="font-sans text-emerald-700">completed</span>
                             ) : (
                               <span className="text-zinc-400">-</span>
                             )}

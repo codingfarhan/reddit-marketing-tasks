@@ -10,8 +10,11 @@ model AdminTask {
   id                String              @id
   redditUrl         String
   postText          String              @db.Text
+  taskType          String              @default("comment")
   commentMode       String              @default("ai")
   customComment     String              @default("") @db.Text
+  taskCategory      String              @default("marketing")
+  warmupDay         Int?
   sortOrder         Int                 @unique
   isActive          Boolean             @default(true)
   createdAt         DateTime            @default(now())
@@ -32,6 +35,13 @@ model GeneratedComment {
 
   @@unique([taskId, personaId])
   @@index([personaId])
+}
+
+model PersonaSetting {
+  personaId        String   @id
+  status           String   @default("marketing")
+  warmupStartDate  DateTime?
+  updatedAt        DateTime @updatedAt
 }
 
 model Submission {

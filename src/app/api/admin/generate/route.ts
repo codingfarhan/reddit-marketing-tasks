@@ -36,16 +36,16 @@ const COMMENT_RESPONSE_FORMAT = {
 
 function validateTask(task: AdminRedditTask) {
   if (!task.redditUrl.trim()) return false
-  if (task.commentMode === "custom") return Boolean(task.customComment.trim())
-  if (task.commentMode === "freeform") return true
-  if (!task.postText.trim()) return false
-
   try {
     const parsed = new URL(task.redditUrl)
-    return parsed.protocol === "http:" || parsed.protocol === "https:"
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false
   } catch {
     return false
   }
+  if (task.taskType !== "comment") return true
+  if (task.commentMode === "custom") return Boolean(task.customComment.trim())
+  if (task.commentMode === "freeform") return true
+  return Boolean(task.postText.trim())
 }
 
 function extractJsonArray(text: string) {
@@ -206,8 +206,8 @@ export async function POST() {
     if (!apiKey) return Response.json({ error: "Missing OPENAI_API_KEY on server" }, { status: 500 })
 
     const config = await readAdminConfig()
-    const tasks = config.tasks
-    if (tasks.length === 0 || tasks.some((task) => !validateTask(task))) {
+    const allTasks = [...config.tasks, ...config.warmupTasks.flat()]
+    if (allTasks.length === 0 || allTasks.some((task) => !validateTask(task))) {
       return Response.json({ error: "Add at least one task with a valid Reddit URL and post text before generating." }, { status: 400 })
     }
 
@@ -218,12 +218,20 @@ export async function POST() {
     })
 
     const generatedTaskComments: GeneratedTaskComments[] = []
-    const commentTasks = tasks
+    const marketingCommentTasks = config.tasks
       .map((task, index) => ({
         task,
-        personas: getPersonasForGroup(getTaskGroup(index, tasks.length)),
+        personas: getPersonasForGroup(getTaskGroup(index, config.tasks.length)),
       }))
-      .filter(({ task }) => task.commentMode !== "freeform")
+      .filter(({ task }) => task.taskType === "comment" && task.commentMode !== "freeform")
+    const warmupCommentTasks = config.warmupTasks
+      .flat()
+      .filter((task) => task.taskType === "comment" && task.commentMode !== "freeform")
+      .map((task) => ({
+        task,
+        personas: commentPersonas,
+      }))
+    const commentTasks = [...marketingCommentTasks, ...warmupCommentTasks]
     for (let index = 0; index < commentTasks.length; index += GENERATION_CONCURRENCY) {
       const chunk = commentTasks.slice(index, index + GENERATION_CONCURRENCY)
       generatedTaskComments.push(...(await Promise.all(chunk.map(({ task, personas }) => generateForTask(client, task, personas)))))
@@ -231,7 +239,6 @@ export async function POST() {
 
     const updated = {
       ...config,
-      tasks,
       generatedTaskComments,
       generatedAt: new Date().toISOString(),
     }

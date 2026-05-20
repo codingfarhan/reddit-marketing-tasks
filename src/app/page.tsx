@@ -51,7 +51,16 @@ function getTaskKey(config: AdminConfig) {
     tasks: config.tasks.map((task) => ({
       id: task.id,
       redditUrl: task.redditUrl,
+      taskType: task.taskType,
     })),
+    warmupTasks: config.warmupTasks.map((dayTasks) =>
+      dayTasks.map((task) => ({
+        id: task.id,
+        redditUrl: task.redditUrl,
+        taskType: task.taskType,
+      })),
+    ),
+    personaSettings: config.personaSettings,
   })
 }
 
@@ -78,6 +87,29 @@ function readSavedProgress(taskKey: string): SavedProgress | null {
   }
 }
 
+function getIstDateKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date)
+}
+
+function getWarmupDay(startDate: string) {
+  if (!startDate) return null
+  const today = new Date(`${getIstDateKey()}T00:00:00.000+05:30`).getTime()
+  const start = new Date(`${startDate}T00:00:00.000+05:30`).getTime()
+  const day = Math.floor((today - start) / 86_400_000) + 1
+  return day >= 1 && day <= 7 ? day : null
+}
+
+function getVisibleTasks(config: AdminConfig, personaId: string) {
+  const personaSetting = config.personaSettings.find((setting) => setting.personaId === personaId)
+  const warmupDay = personaSetting?.status === "warmup" ? getWarmupDay(personaSetting.warmupStartDate) : null
+  return warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(config.tasks, personaId)
+}
+
 export default function Home() {
   const [config, setConfig] = useState<AdminConfig | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -92,6 +124,8 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submissionId, setSubmissionId] = useState<string | null>(null)
   const [countdown, setCountdown] = useState<number | null>(null)
+  const [showWarmupNotice, setShowWarmupNotice] = useState(false)
+  const warmupNoticeKey = useRef<string | null>(null)
   const copyTimer = useRef<number | null>(null)
   const hasLoadedProgress = useRef(false)
 
@@ -110,7 +144,7 @@ export default function Home() {
           setNameQuery(saved.nameQuery)
           setSelectedPersonaId(saved.selectedPersonaId)
           setRedditUsername(saved.redditUsername)
-          const savedPersonaTasks = saved.selectedPersonaId ? getTasksForPersona(data.tasks, saved.selectedPersonaId) : []
+          const savedPersonaTasks = saved.selectedPersonaId ? getVisibleTasks(data, saved.selectedPersonaId) : []
           setTaskIndex(Math.min(Math.max(saved.taskIndex, 0), Math.max(savedPersonaTasks.length - 1, 0)))
           setCommentUrlByTaskId(saved.commentUrlByTaskId)
         }
@@ -165,7 +199,14 @@ export default function Home() {
 
   const selectedPersona = commentPersonas.find((persona) => persona.id === selectedPersonaId) ?? null
   const allTasks = config?.tasks ?? []
-  const tasks = selectedPersona ? getTasksForPersona(allTasks, selectedPersona.id) : []
+  const personaSetting = selectedPersona ? config?.personaSettings.find((setting) => setting.personaId === selectedPersona.id) : null
+  const warmupDay = personaSetting?.status === "warmup" ? getWarmupDay(personaSetting.warmupStartDate) : null
+  const tasks =
+    selectedPersona && config
+      ? warmupDay
+        ? config.warmupTasks[warmupDay - 1] ?? []
+        : getTasksForPersona(allTasks, selectedPersona.id)
+      : []
   const activeTask = tasks[taskIndex] ?? null
   const activeGeneratedComment =
     activeTask && selectedPersona && config
@@ -181,6 +222,15 @@ export default function Home() {
   const completedTasks = tasks.filter((task) => commentUrlByTaskId[task.id]?.trim()).length
   const totalSteps = 2 + Math.max(tasks.length, 1)
   const currentStep = step === "name" ? 1 : step === "reddit" ? 2 : step === "done" ? totalSteps : 3 + taskIndex
+
+  useEffect(() => {
+    if (step !== "tasks" || warmupDay !== 1 || taskIndex !== 0 || !selectedPersonaId) return
+
+    const noticeKey = `${selectedPersonaId}:warmup-day-1`
+    if (warmupNoticeKey.current === noticeKey) return
+    warmupNoticeKey.current = noticeKey
+    setShowWarmupNotice(true)
+  }, [selectedPersonaId, step, taskIndex, warmupDay])
 
   function choosePersona(personaId: string) {
     const persona = commentPersonas.find((item) => item.id === personaId)
@@ -205,6 +255,10 @@ export default function Home() {
       setSubmitError("Enter your Reddit username.")
       return
     }
+    if (tasks.length === 0) {
+      setSubmitError("No tasks are available for your account today.")
+      return
+    }
     setSubmitError(null)
     setTaskIndex(0)
     setStep("tasks")
@@ -223,7 +277,7 @@ export default function Home() {
     if (!selectedPersona || !config) return
     const missing = tasks.find((task) => !commentUrlByTaskId[task.id]?.trim())
     if (missing) {
-      setSubmitError(`Missing Reddit comment URL for ${missing.id}.`)
+      setSubmitError(missing.taskType === "comment" ? `Missing Reddit comment URL for ${missing.id}.` : `Missing screenshot for ${missing.id}.`)
       return
     }
 
@@ -265,10 +319,10 @@ export default function Home() {
     if (!activeTask) return
     const commentUrl = commentUrlByTaskId[activeTask.id]?.trim() ?? ""
     if (!commentUrl) {
-      setSubmitError("Paste the Reddit comment URL to continue.")
+      setSubmitError(activeTask.taskType === "comment" ? "Paste the Reddit comment URL to continue." : "Upload a screenshot to continue.")
       return
     }
-    if (!validateCommentUrl(commentUrl)) {
+    if (activeTask.taskType === "comment" && !validateCommentUrl(commentUrl)) {
       setSubmitError("Enter a valid Reddit comment URL.")
       return
     }
@@ -291,18 +345,21 @@ export default function Home() {
   const setupIncomplete =
     !loadError &&
     config &&
-    (allTasks.length === 0 ||
-      allTasks.some(
+    ([...allTasks, ...(config?.warmupTasks.flat() ?? [])].length === 0 ||
+      [...allTasks, ...(config?.warmupTasks.flat() ?? [])].some(
         (task) =>
           !task.redditUrl ||
-          (task.commentMode === "custom"
+          (task.taskType !== "comment"
+            ? false
+            : task.commentMode === "custom"
             ? !task.customComment
             : task.commentMode === "freeform"
               ? false
               : !task.postText),
       ) ||
-      allTasks.some(
+      [...allTasks, ...(config?.warmupTasks.flat() ?? [])].some(
         (task) =>
+          task.taskType === "comment" &&
           task.commentMode !== "freeform" &&
           !config.generatedTaskComments.find((item) => item.taskId === task.id),
       ))
@@ -310,6 +367,26 @@ export default function Home() {
   return (
     <main className="min-h-dvh bg-zinc-50 px-4 py-6 text-zinc-950">
       <div className="mx-auto max-w-xl">
+        {showWarmupNotice && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-950/60 px-4">
+            <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
+              <h2 className="text-lg font-semibold">Before you start warmup</h2>
+              <p className="mt-3 text-sm leading-6 text-zinc-700">
+                Please make sure you are using a new Reddit account for the account warm up process. If your last account
+                was on your mobile phone, please use your laptop or any other device for creating the new Reddit account
+                and completing these tasks.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowWarmupNotice(false)}
+                className="mt-5 w-full rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-zinc-800"
+              >
+                I understand
+              </button>
+            </div>
+          </div>
+        )}
+
         <header className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <h1 className="text-lg font-semibold tracking-tight">Task Submission</h1>
           <p className="mt-1 text-sm text-zinc-600">Select your assigned name and submit Reddit comment links.</p>
@@ -398,6 +475,20 @@ export default function Home() {
             </div>
           )}
 
+          {config && !setupIncomplete && step === "tasks" && !activeTask && (
+            <div>
+              <h2 className="text-base font-semibold">No tasks available</h2>
+              <p className="mt-2 text-sm text-zinc-600">There are no tasks assigned to your account today.</p>
+              <button
+                type="button"
+                onClick={() => setStep("name")}
+                className="mt-5 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold transition hover:bg-zinc-50"
+              >
+                Back
+              </button>
+            </div>
+          )}
+
           {config && !setupIncomplete && step === "tasks" && activeTask && (
             <div>
               <div className="flex items-start justify-between gap-3">
@@ -414,7 +505,7 @@ export default function Home() {
                     {activeTask.redditUrl}
                   </a>
                 </div>
-                {activeTask.commentMode !== "freeform" && (
+                {activeTask.taskType === "comment" && activeTask.commentMode !== "freeform" && (
                   <button
                     type="button"
                     onClick={copyComment}
@@ -428,7 +519,11 @@ export default function Home() {
                 )}
               </div>
 
-              {activeTask.commentMode === "freeform" ? (
+              {activeTask.taskType !== "comment" ? (
+                <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">
+                  {activeTask.taskType === "upvote" ? "Upvote this post, then upload a screenshot." : "Join this subreddit, then upload a screenshot."}
+                </p>
+              ) : activeTask.commentMode === "freeform" ? (
                 <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">
                   Write any comment you think fits this post.
                 </p>
@@ -441,17 +536,37 @@ export default function Home() {
                 />
               )}
 
-              <label className="mt-4 block text-sm font-medium">Reddit comment URL</label>
-              <input
-                value={commentUrlByTaskId[activeTask.id] ?? ""}
-                onChange={(event) => {
-                  setSubmitError(null)
-                  setCommentUrlByTaskId((prev) => ({ ...prev, [activeTask.id]: event.target.value }))
-                }}
-                placeholder="https://www.reddit.com/r/.../comments/..."
-                inputMode="url"
-                className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
-              />
+              {activeTask.taskType === "comment" ? (
+                <>
+                  <label className="mt-4 block text-sm font-medium">Reddit comment URL</label>
+                  <input
+                    value={commentUrlByTaskId[activeTask.id] ?? ""}
+                    onChange={(event) => {
+                      setSubmitError(null)
+                      setCommentUrlByTaskId((prev) => ({ ...prev, [activeTask.id]: event.target.value }))
+                    }}
+                    placeholder="https://www.reddit.com/r/.../comments/..."
+                    inputMode="url"
+                    className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
+                  />
+                </>
+              ) : (
+                <>
+                  <label className="mt-4 block text-sm font-medium">Upload screenshot</label>
+                  <input
+                    type="file"
+                    accept="image/*,.pdf"
+                    onChange={(event) => {
+                      setSubmitError(null)
+                      if (event.target.files?.[0]) {
+                        setCommentUrlByTaskId((prev) => ({ ...prev, [activeTask.id]: "screenshot submitted" }))
+                      }
+                    }}
+                    className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm"
+                  />
+                  {commentUrlByTaskId[activeTask.id] && <p className="mt-2 text-sm text-emerald-700">Screenshot selected. It will not be uploaded.</p>}
+                </>
+              )}
 
               {submitError && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">{submitError}</p>}
 
