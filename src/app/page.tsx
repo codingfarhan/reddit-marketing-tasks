@@ -79,8 +79,7 @@ function readSavedProgress(taskKey: string): SavedProgress | null {
       selectedPersonaId: typeof parsed.selectedPersonaId === "string" ? parsed.selectedPersonaId : null,
       redditUsername: typeof parsed.redditUsername === "string" ? parsed.redditUsername : "",
       taskIndex: typeof parsed.taskIndex === "number" ? parsed.taskIndex : 0,
-      commentUrlByTaskId:
-        parsed.commentUrlByTaskId && typeof parsed.commentUrlByTaskId === "object" ? parsed.commentUrlByTaskId : {},
+      commentUrlByTaskId: parsed.commentUrlByTaskId && typeof parsed.commentUrlByTaskId === "object" ? parsed.commentUrlByTaskId : {},
     }
   } catch {
     return null
@@ -202,11 +201,7 @@ export default function Home() {
   const personaSetting = selectedPersona ? config?.personaSettings.find((setting) => setting.personaId === selectedPersona.id) : null
   const warmupDay = personaSetting?.status === "warmup" ? getWarmupDay(personaSetting.warmupStartDate) : null
   const tasks =
-    selectedPersona && config
-      ? warmupDay
-        ? config.warmupTasks[warmupDay - 1] ?? []
-        : getTasksForPersona(allTasks, selectedPersona.id)
-      : []
+    selectedPersona && config ? (warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(allTasks, selectedPersona.id)) : []
   const activeTask = tasks[taskIndex] ?? null
   const activeGeneratedComment =
     activeTask && selectedPersona && config
@@ -284,7 +279,9 @@ export default function Home() {
     try {
       setIsSubmitting(true)
       setSubmitError(null)
-      const sid = `${new Date().toISOString().replace(/[:.]/g, "-")}_${safeSegment(selectedPersona.name)}_${safeSegment(redditUsername)}_${crypto.randomUUID()}`
+      const sid = `${new Date().toISOString().replace(/[:.]/g, "-")}_${safeSegment(selectedPersona.name)}_${safeSegment(
+        redditUsername,
+      )}_${crypto.randomUUID()}`
       const res = await fetch("/api/submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -354,14 +351,12 @@ export default function Home() {
             : task.commentMode === "custom"
             ? !task.customComment
             : task.commentMode === "freeform"
-              ? false
-              : !task.postText),
+            ? false
+            : !task.postText),
       ) ||
       [...allTasks, ...(config?.warmupTasks.flat() ?? [])].some(
         (task) =>
-          task.taskType === "comment" &&
-          task.commentMode !== "freeform" &&
-          !config.generatedTaskComments.find((item) => item.taskId === task.id),
+          task.taskType === "comment" && task.commentMode !== "freeform" && !config.generatedTaskComments.find((item) => item.taskId === task.id),
       ))
 
   return (
@@ -372,9 +367,8 @@ export default function Home() {
             <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl">
               <h2 className="text-lg font-semibold">Before you start warmup</h2>
               <p className="mt-3 text-sm leading-6 text-zinc-700">
-                Please make sure you are using a new Reddit account for the account warm up process. If your last account
-                was on your mobile phone, please use your laptop or any other device for creating the new Reddit account
-                and completing these tasks.
+                Please make sure you are using a new Reddit account for the account warm up process. If your last account was on your mobile phone,
+                please use your laptop or any other device for creating the new Reddit account and completing these tasks.
               </p>
               <button
                 type="button"
@@ -424,7 +418,9 @@ export default function Home() {
                       key={persona.id}
                       type="button"
                       onClick={() => choosePersona(persona.id)}
-                      className={`block w-full px-3 py-2.5 text-left text-sm transition hover:bg-zinc-50 ${selectedPersonaId === persona.id ? "bg-zinc-900 text-white hover:bg-zinc-900" : ""}`}
+                      className={`block w-full px-3 py-2.5 text-left text-sm transition hover:bg-zinc-50 ${
+                        selectedPersonaId === persona.id ? "bg-zinc-900 text-white hover:bg-zinc-900" : ""
+                      }`}
                     >
                       {persona.name}
                     </button>
@@ -521,12 +517,12 @@ export default function Home() {
 
               {activeTask.taskType !== "comment" ? (
                 <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">
-                  {activeTask.taskType === "upvote" ? "Upvote this post, then upload a screenshot." : "Join this subreddit, then upload a screenshot."}
+                  {activeTask.taskType === "upvote"
+                    ? "Upvote this post, then upload a screenshot."
+                    : "Join this subreddit, then upload a screenshot."}
                 </p>
               ) : activeTask.commentMode === "freeform" ? (
-                <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">
-                  Write any comment you think fits this post.
-                </p>
+                <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">Write any comment you think fits this post.</p>
               ) : (
                 <textarea
                   value={activeGeneratedComment}
@@ -564,7 +560,7 @@ export default function Home() {
                     }}
                     className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm"
                   />
-                  {commentUrlByTaskId[activeTask.id] && <p className="mt-2 text-sm text-emerald-700">Screenshot selected. It will not be uploaded.</p>}
+                  {commentUrlByTaskId[activeTask.id] && <p className="mt-2 text-sm text-emerald-700">Screenshot selected.</p>}
                 </>
               )}
 
