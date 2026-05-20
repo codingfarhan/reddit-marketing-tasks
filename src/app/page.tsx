@@ -339,25 +339,61 @@ export default function Home() {
     copyTimer.current = window.setTimeout(() => setCopied(false), 1500)
   }
 
+  const allConfiguredTasks = config ? [...allTasks, ...config.warmupTasks.flat()] : []
+  const readinessIssue =
+    selectedPersona && config
+      ? tasks.length === 0
+        ? "No tasks are assigned to your account today."
+        : tasks.reduce<string | null>((issue, task) => {
+            if (issue) return issue
+            if (!task.redditUrl) return `${task.id} is missing a Reddit link.`
+            if (task.taskType === "comment" && task.commentMode === "custom" && !task.customComment) {
+              return `${task.id} is missing its custom comment.`
+            }
+            if (task.taskType === "comment" && task.commentMode === "ai" && !task.postText) {
+              return `${task.id} is missing post text for comment generation.`
+            }
+            if (
+              task.taskType === "comment" &&
+              task.commentMode !== "freeform" &&
+              !config.generatedTaskComments
+                .find((item) => item.taskId === task.id)
+                ?.comments.find((comment) => comment.personaId === selectedPersona.id)?.comment
+            ) {
+              return `${task.id} is missing a generated comment for ${selectedPersona.name}.`
+            }
+            return null
+          }, null)
+      : null
+  const visibleTasksAreReady =
+    tasks.length > 0 &&
+    !readinessIssue &&
+    tasks.every((task) => {
+      const hasRequiredTaskData =
+        task.redditUrl &&
+        (task.taskType !== "comment"
+          ? true
+          : task.commentMode === "custom"
+            ? task.customComment
+            : task.commentMode === "freeform"
+              ? true
+              : task.postText)
+      const hasRequiredGeneratedComment =
+        !selectedPersona ||
+        task.taskType !== "comment" ||
+        task.commentMode === "freeform" ||
+        Boolean(
+          config?.generatedTaskComments
+            .find((item) => item.taskId === task.id)
+            ?.comments.find((comment) => comment.personaId === selectedPersona.id)?.comment,
+        )
+
+      return hasRequiredTaskData && hasRequiredGeneratedComment
+    })
   const setupIncomplete =
     !loadError &&
     config &&
-    ([...allTasks, ...(config?.warmupTasks.flat() ?? [])].length === 0 ||
-      [...allTasks, ...(config?.warmupTasks.flat() ?? [])].some(
-        (task) =>
-          !task.redditUrl ||
-          (task.taskType !== "comment"
-            ? false
-            : task.commentMode === "custom"
-            ? !task.customComment
-            : task.commentMode === "freeform"
-            ? false
-            : !task.postText),
-      ) ||
-      [...allTasks, ...(config?.warmupTasks.flat() ?? [])].some(
-        (task) =>
-          task.taskType === "comment" && task.commentMode !== "freeform" && !config.generatedTaskComments.find((item) => item.taskId === task.id),
-      ))
+    (allConfiguredTasks.length === 0 || (selectedPersona ? !visibleTasksAreReady : false))
 
   return (
     <main className="min-h-dvh bg-zinc-50 px-4 py-6 text-zinc-950">
@@ -392,9 +428,9 @@ export default function Home() {
         <section className="mt-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           {!config && !loadError && <p className="text-sm text-zinc-600">Loading tasks...</p>}
           {loadError && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm text-red-800">{loadError}</p>}
-          {setupIncomplete && (
+          {setupIncomplete && selectedPersona && (
             <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Tasks are not ready yet. Please check back after admin generates comments.
+              Tasks are not ready yet. {readinessIssue ?? "Please check back after admin generates comments."}
             </p>
           )}
 

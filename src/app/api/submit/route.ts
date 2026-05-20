@@ -79,13 +79,12 @@ export async function POST(request: Request) {
     if (!persona) return Response.json({ error: "Select a valid name from the dropdown" }, { status: 400 })
 
     const config = await readAdminConfig()
-    const allConfiguredTasks = [...config.tasks, ...config.warmupTasks.flat()]
     const personaSetting = config.personaSettings.find((setting) => setting.personaId === personaId)
     const warmupDay = personaSetting?.status === "warmup" ? getWarmupDay(personaSetting.warmupStartDate) : null
     const configuredTasks = warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(config.tasks, personaId)
     const hasValidSetup =
       configuredTasks.length > 0 &&
-      allConfiguredTasks.every(
+      configuredTasks.every(
         (task) =>
           task.id &&
           task.redditUrl.trim() &&
@@ -98,11 +97,15 @@ export async function POST(request: Request) {
               : task.postText.trim()) &&
           isValidHttpUrl(task.redditUrl),
       ) &&
-      allConfiguredTasks.every(
+      configuredTasks.every(
         (task) =>
           task.taskType !== "comment" ||
           task.commentMode === "freeform" ||
-          Boolean(config.generatedTaskComments.find((item) => item.taskId === task.id)),
+          Boolean(
+            config.generatedTaskComments
+              .find((item) => item.taskId === task.id)
+              ?.comments.find((comment) => comment.personaId === personaId)?.comment,
+          ),
       )
 
     if (!hasValidSetup) {

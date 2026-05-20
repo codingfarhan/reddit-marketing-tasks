@@ -12,10 +12,13 @@ function formatIstDateInput(date: Date | null | undefined) {
   }).format(date)
 }
 
+function hasTaskContent(task: { redditUrl: string; postText: string; customComment: string }) {
+  return Boolean(task.redditUrl.trim() || task.postText.trim() || task.customComment.trim())
+}
+
 export async function readAdminConfig(): Promise<AdminConfig> {
   const fallback = emptyAdminConfig()
-  const tasks = await prisma.adminTask.findMany({
-    where: { isActive: true },
+  const storedTasks = await prisma.adminTask.findMany({
     orderBy: { sortOrder: "asc" },
     include: {
       generatedComments: {
@@ -24,6 +27,12 @@ export async function readAdminConfig(): Promise<AdminConfig> {
     },
   })
   const personaSettings = await prisma.personaSetting.findMany()
+  const activeTasks = storedTasks.filter((task) => task.isActive)
+  const inactiveTasksWithContent = storedTasks.filter((task) => !task.isActive && hasTaskContent(task))
+  const tasks =
+    activeTasks.some(hasTaskContent) || inactiveTasksWithContent.length === 0
+      ? activeTasks.filter(hasTaskContent)
+      : inactiveTasksWithContent
 
   if (tasks.length === 0) {
     return {
