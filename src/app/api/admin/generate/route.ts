@@ -1,7 +1,7 @@
 import OpenAI from "openai"
 import type { AdminRedditTask, GeneratedTaskComments } from "@/lib/admin-types"
 import { readAdminConfig, writeAdminConfig } from "@/lib/admin-storage"
-import { getPersonasForGroup, getTaskGroup } from "@/lib/persona-groups"
+import { getPersonasForGroup, getShuffledMarketingTasks, getTaskGroup } from "@/lib/persona-groups"
 import { commentPersonas, type CommentPersona, type GeneratedPersonaComment } from "@/lib/personas"
 
 export const runtime = "nodejs"
@@ -218,10 +218,11 @@ export async function POST() {
     })
 
     const generatedTaskComments: GeneratedTaskComments[] = []
-    const marketingCommentTasks = config.tasks
+    const shuffledMarketingTasks = getShuffledMarketingTasks(config.tasks)
+    const marketingCommentTasks = shuffledMarketingTasks
       .map((task, index) => ({
         task,
-        personas: getPersonasForGroup(getTaskGroup(index, config.tasks.length)),
+        personas: getPersonasForGroup(getTaskGroup(index, shuffledMarketingTasks.length)),
       }))
       .filter(({ task }) => task.taskType === "comment" && task.commentMode !== "freeform")
     const warmupCommentTasks = config.warmupTasks

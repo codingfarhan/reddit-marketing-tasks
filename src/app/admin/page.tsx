@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import type { AdminConfig, AdminRedditTask, PersonaSetting } from "@/lib/admin-types"
-import { getTaskGroup } from "@/lib/persona-groups"
+import { getShuffledMarketingTasks, getTaskGroup } from "@/lib/persona-groups"
 import { commentPersonas } from "@/lib/personas"
 
 type Status = {
@@ -78,6 +78,7 @@ export default function AdminPage() {
   }, [tasks, warmupTasks])
   const totalTaskCount = tasks.length + warmupTasks.flat().length
   const canGenerate = totalTaskCount > 0 && completedCount === totalTaskCount && status.kind !== "saving" && status.kind !== "generating"
+  const shuffledMarketingTaskIds = useMemo(() => getShuffledMarketingTasks(tasks).map((task) => task.id), [tasks])
 
   useEffect(() => {
     let alive = true
@@ -255,7 +256,10 @@ export default function AdminPage() {
             <div key={task.id} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
               <div className="flex items-center justify-between gap-3">
                 <h2 className="text-sm font-semibold">
-                  Task {index + 1} <span className="text-zinc-500">• {getTaskGroup(index, tasks.length) === "group_1" ? "Group 1" : "Group 2"}</span>
+                  Task {index + 1}{" "}
+                  <span className="text-zinc-500">
+                    • {getTaskGroup(shuffledMarketingTaskIds.indexOf(task.id), tasks.length) === "group_1" ? "Group 1" : "Group 2"}
+                  </span>
                 </h2>
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-xs text-zinc-500">{task.id}</span>
