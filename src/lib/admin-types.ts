@@ -31,7 +31,7 @@ export function isAdminTaskType(value: unknown): value is AdminTaskType {
 }
 
 export function taskTypeRequiresRedditUrl(taskType: string) {
-  return taskType !== "change_profile_picture" && taskType !== "change_profile_bio"
+  return taskType === "comment" || taskType === "upvote" || taskType === "join_subreddit"
 }
 
 export type PersonaSetting = {
