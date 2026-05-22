@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import type { AdminConfig, AdminRedditTask, PersonaSetting } from "@/lib/admin-types"
+import { isAdminTaskType, type AdminConfig, type AdminRedditTask, type PersonaSetting } from "@/lib/admin-types"
 import { getShuffledMarketingTasks, getTaskGroup } from "@/lib/persona-groups"
 import { commentPersonas } from "@/lib/personas"
 
@@ -299,10 +299,7 @@ export default function AdminPage() {
                 value={task.taskType}
                 onChange={(event) =>
                   updateTask(index, {
-                    taskType:
-                      event.target.value === "upvote" || event.target.value === "join_subreddit"
-                        ? event.target.value
-                        : "comment",
+                    taskType: isAdminTaskType(event.target.value) ? event.target.value : "comment",
                   })
                 }
                 className="mt-2 w-full rounded-xl border border-zinc-200 bg-white px-3 py-2.5 text-sm outline-none transition focus:border-zinc-900 focus:ring-4 focus:ring-zinc-900/10"
@@ -310,6 +307,9 @@ export default function AdminPage() {
                 <option value="comment">Comment task</option>
                 <option value="upvote">Upvote this post</option>
                 <option value="join_subreddit">Join a subreddit</option>
+                <option value="change_profile_picture">Change profile picture</option>
+                <option value="change_profile_bio">Change profile bio</option>
+                <option value="verify_reddit_email">Verify Reddit email</option>
               </select>
 
               {task.taskType === "comment" && (
@@ -433,10 +433,7 @@ export default function AdminPage() {
                       value={task.taskType}
                       onChange={(event) =>
                         updateWarmupTask(dayIndex, taskIndex, {
-                          taskType:
-                            event.target.value === "upvote" || event.target.value === "join_subreddit"
-                              ? event.target.value
-                              : "comment",
+                          taskType: isAdminTaskType(event.target.value) ? event.target.value : "comment",
                         })
                       }
                       className="mt-3 w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm"
@@ -444,6 +441,9 @@ export default function AdminPage() {
                       <option value="comment">Comment task</option>
                       <option value="upvote">Upvote this post</option>
                       <option value="join_subreddit">Join a subreddit</option>
+                      <option value="change_profile_picture">Change profile picture</option>
+                      <option value="change_profile_bio">Change profile bio</option>
+                      <option value="verify_reddit_email">Verify Reddit email</option>
                     </select>
 
                     {task.taskType === "comment" && (

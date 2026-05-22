@@ -4,11 +4,30 @@ export type AdminRedditTask = {
   id: string
   redditUrl: string
   postText: string
-  taskType: "comment" | "upvote" | "join_subreddit"
+  taskType: AdminTaskType
   commentMode: "ai" | "custom" | "freeform"
   customComment: string
   taskCategory: "marketing" | "warmup"
   warmupDay: number | null
+}
+
+export type AdminTaskType =
+  | "comment"
+  | "upvote"
+  | "join_subreddit"
+  | "change_profile_picture"
+  | "change_profile_bio"
+  | "verify_reddit_email"
+
+export function isAdminTaskType(value: unknown): value is AdminTaskType {
+  return (
+    value === "comment" ||
+    value === "upvote" ||
+    value === "join_subreddit" ||
+    value === "change_profile_picture" ||
+    value === "change_profile_bio" ||
+    value === "verify_reddit_email"
+  )
 }
 
 export type PersonaSetting = {

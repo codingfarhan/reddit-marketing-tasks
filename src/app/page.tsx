@@ -116,6 +116,20 @@ function isNewlyAddedPersona(personaId: string) {
   return personaNumber >= 16 && personaNumber <= 30
 }
 
+function getScreenshotTaskInstruction(taskType: string) {
+  if (taskType === "upvote") return "Upvote this post, then upload a screenshot."
+  if (taskType === "join_subreddit") return "Join this subreddit, then upload a screenshot."
+  if (taskType === "change_profile_picture") return "Change your Reddit profile picture, then upload a screenshot."
+  if (taskType === "change_profile_bio") return "Change your Reddit profile bio, then upload a screenshot."
+  if (taskType === "verify_reddit_email")
+    return "Verify the email used for your Reddit account (if you signed up with Google it may already be verified). Then open reddit.com/settings/account, take a screenshot showing your email status, and upload it here."
+  return "Complete this task, then upload a screenshot."
+}
+
+function taskRequiresRedditUrl(taskType: string) {
+  return taskType === "comment" || taskType === "upvote" || taskType === "join_subreddit"
+}
+
 export default function Home() {
   const [config, setConfig] = useState<AdminConfig | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -354,7 +368,7 @@ export default function Home() {
         ? "No tasks are assigned to your account today."
         : tasks.reduce<string | null>((issue, task) => {
             if (issue) return issue
-            if (!task.redditUrl) return `${task.id} is missing a Reddit link.`
+            if (taskRequiresRedditUrl(task.taskType) && !task.redditUrl) return `${task.id} is missing a Reddit link.`
             if (task.taskType === "comment" && task.commentMode === "custom" && !task.customComment) {
               return `${task.id} is missing its custom comment.`
             }
@@ -378,7 +392,7 @@ export default function Home() {
     !readinessIssue &&
     tasks.every((task) => {
       const hasRequiredTaskData =
-        task.redditUrl &&
+        (!taskRequiresRedditUrl(task.taskType) || task.redditUrl) &&
         (task.taskType !== "comment"
           ? true
           : task.commentMode === "custom"
@@ -536,14 +550,16 @@ export default function Home() {
                   <h2 className="text-base font-semibold">
                     Task {taskIndex + 1} <span className="text-zinc-500">/ {tasks.length}</span>
                   </h2>
-                  <a
-                    href={activeTask.redditUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-2 block break-all font-mono text-xs text-zinc-700 underline decoration-zinc-300 underline-offset-4 hover:decoration-zinc-900"
-                  >
-                    {activeTask.redditUrl}
-                  </a>
+                  {taskRequiresRedditUrl(activeTask.taskType) && (
+                    <a
+                      href={activeTask.redditUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 block break-all font-mono text-xs text-zinc-700 underline decoration-zinc-300 underline-offset-4 hover:decoration-zinc-900"
+                    >
+                      {activeTask.redditUrl}
+                    </a>
+                  )}
                 </div>
                 {activeTask.taskType === "comment" && activeTask.commentMode !== "freeform" && (
                   <button
@@ -561,9 +577,7 @@ export default function Home() {
 
               {activeTask.taskType !== "comment" ? (
                 <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">
-                  {activeTask.taskType === "upvote"
-                    ? "Upvote this post, then upload a screenshot."
-                    : "Join this subreddit, then upload a screenshot."}
+                  {getScreenshotTaskInstruction(activeTask.taskType)}
                 </p>
               ) : activeTask.commentMode === "freeform" ? (
                 <p className="mt-4 rounded-xl bg-zinc-50 px-3 py-2.5 text-sm text-zinc-700">Write any comment you think fits this post.</p>

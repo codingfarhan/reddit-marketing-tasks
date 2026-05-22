@@ -1,4 +1,4 @@
-import { emptyAdminConfig, type AdminConfig } from "@/lib/admin-types"
+import { emptyAdminConfig, isAdminTaskType, type AdminConfig } from "@/lib/admin-types"
 import { prisma } from "@/lib/db"
 import { commentPersonas } from "@/lib/personas"
 
@@ -65,7 +65,7 @@ export async function readAdminConfig(): Promise<AdminConfig> {
       id: task.id,
       redditUrl: task.redditUrl,
       postText: task.postText,
-      taskType: task.taskType === "upvote" || task.taskType === "join_subreddit" ? task.taskType : "comment",
+      taskType: isAdminTaskType(task.taskType) ? task.taskType : "comment",
       commentMode: task.commentMode === "custom" || task.commentMode === "freeform" ? task.commentMode : "ai",
       customComment: task.customComment,
       taskCategory: "marketing",
@@ -78,7 +78,7 @@ export async function readAdminConfig(): Promise<AdminConfig> {
           id: task.id,
           redditUrl: task.redditUrl,
           postText: task.postText,
-          taskType: task.taskType === "upvote" || task.taskType === "join_subreddit" ? task.taskType : "comment",
+          taskType: isAdminTaskType(task.taskType) ? task.taskType : "comment",
           commentMode: task.commentMode === "custom" || task.commentMode === "freeform" ? task.commentMode : "ai",
           customComment: task.customComment,
           taskCategory: "warmup",

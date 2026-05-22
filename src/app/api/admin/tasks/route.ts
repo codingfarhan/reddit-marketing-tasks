@@ -1,4 +1,4 @@
-import type { AdminRedditTask } from "@/lib/admin-types"
+import { isAdminTaskType, type AdminRedditTask } from "@/lib/admin-types"
 import { readAdminConfig, writeAdminConfig } from "@/lib/admin-storage"
 import { commentPersonas } from "@/lib/personas"
 
@@ -22,8 +22,7 @@ function normalizeTasks(tasks: AdminRedditTask[], category: "marketing" | "warmu
       id,
       redditUrl: String(task?.redditUrl ?? "").trim(),
       postText: String(task?.postText ?? "").trim(),
-      taskType:
-        task?.taskType === "upvote" || task?.taskType === "join_subreddit" ? task.taskType : "comment",
+      taskType: isAdminTaskType(task?.taskType) ? task.taskType : "comment",
       commentMode: task?.commentMode === "custom" || task?.commentMode === "freeform" ? task.commentMode : "ai",
       customComment: String(task?.customComment ?? "").trim(),
       taskCategory: category,
