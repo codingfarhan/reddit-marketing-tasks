@@ -82,7 +82,7 @@ export async function POST(request: Request) {
     const config = await readAdminConfig()
     const personaSetting = config.personaSettings.find((setting) => setting.personaId === personaId)
     const warmupDay = personaSetting?.status === "warmup" ? getWarmupDay(personaSetting.warmupStartDate) : null
-    const configuredTasks = warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(config.tasks, personaId)
+    const configuredTasks = warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(config.tasks, personaId, config.personaSettings)
     const hasValidSetup =
       configuredTasks.length > 0 &&
       configuredTasks.every(

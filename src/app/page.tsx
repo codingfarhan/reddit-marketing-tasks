@@ -106,7 +106,7 @@ function getWarmupDay(startDate: string) {
 function getVisibleTasks(config: AdminConfig, personaId: string) {
   const personaSetting = config.personaSettings.find((setting) => setting.personaId === personaId)
   const warmupDay = personaSetting?.status === "warmup" ? getWarmupDay(personaSetting.warmupStartDate) : null
-  return warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(config.tasks, personaId)
+  return warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(config.tasks, personaId, config.personaSettings)
 }
 
 function isNewlyAddedPersona(personaId: string) {
@@ -222,7 +222,11 @@ export default function Home() {
   const personaSetting = selectedPersona ? config?.personaSettings.find((setting) => setting.personaId === selectedPersona.id) : null
   const warmupDay = personaSetting?.status === "warmup" ? getWarmupDay(personaSetting.warmupStartDate) : null
   const tasks =
-    selectedPersona && config ? (warmupDay ? config.warmupTasks[warmupDay - 1] ?? [] : getTasksForPersona(allTasks, selectedPersona.id)) : []
+    selectedPersona && config
+      ? warmupDay
+        ? config.warmupTasks[warmupDay - 1] ?? []
+        : getTasksForPersona(allTasks, selectedPersona.id, config.personaSettings)
+      : []
   const activeTask = tasks[taskIndex] ?? null
   const activeGeneratedComment =
     activeTask && selectedPersona && config
