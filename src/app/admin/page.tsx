@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { isAdminTaskType, type AdminConfig, type AdminRedditTask, type PersonaSetting } from "@/lib/admin-types"
+import { isAdminTaskType, taskTypeRequiresRedditUrl, type AdminConfig, type AdminRedditTask, type PersonaSetting } from "@/lib/admin-types"
 import { getShuffledMarketingTasks, getTaskGroup } from "@/lib/persona-groups"
 import { commentPersonas } from "@/lib/personas"
 
@@ -66,7 +66,7 @@ export default function AdminPage() {
     const allTasks = [...tasks, ...warmupTasks.flat()]
     return allTasks.filter(
       (task) =>
-        task.redditUrl.trim() &&
+        (!taskTypeRequiresRedditUrl(task.taskType) || task.redditUrl.trim()) &&
         (task.taskType !== "comment"
           ? true
           : task.commentMode === "custom"

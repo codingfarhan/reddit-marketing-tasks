@@ -1,5 +1,5 @@
 import OpenAI from "openai"
-import type { AdminRedditTask, GeneratedTaskComments } from "@/lib/admin-types"
+import { taskTypeRequiresRedditUrl, type AdminRedditTask, type GeneratedTaskComments } from "@/lib/admin-types"
 import { readAdminConfig, writeAdminConfig } from "@/lib/admin-storage"
 import { getPersonasForGroup, getShuffledMarketingTasks, getTaskGroup } from "@/lib/persona-groups"
 import { commentPersonas, type CommentPersona, type GeneratedPersonaComment } from "@/lib/personas"
@@ -35,12 +35,14 @@ const COMMENT_RESPONSE_FORMAT = {
 } as const
 
 function validateTask(task: AdminRedditTask) {
-  if (!task.redditUrl.trim()) return false
-  try {
-    const parsed = new URL(task.redditUrl)
-    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false
-  } catch {
-    return false
+  if (taskTypeRequiresRedditUrl(task.taskType)) {
+    if (!task.redditUrl.trim()) return false
+    try {
+      const parsed = new URL(task.redditUrl)
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false
+    } catch {
+      return false
+    }
   }
   if (task.taskType !== "comment") return true
   if (task.commentMode === "custom") return Boolean(task.customComment.trim())

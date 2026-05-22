@@ -1,3 +1,4 @@
+import { taskTypeRequiresRedditUrl } from "@/lib/admin-types"
 import { readAdminConfig } from "@/lib/admin-storage"
 import { getTasksForPersona } from "@/lib/persona-groups"
 import { commentPersonas } from "@/lib/personas"
@@ -87,7 +88,7 @@ export async function POST(request: Request) {
       configuredTasks.every(
         (task) =>
           task.id &&
-          task.redditUrl.trim() &&
+          (!taskTypeRequiresRedditUrl(task.taskType) || task.redditUrl.trim()) &&
           (task.taskType !== "comment"
             ? true
             : task.commentMode === "custom"
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
             : task.commentMode === "freeform"
               ? true
               : task.postText.trim()) &&
-          isValidHttpUrl(task.redditUrl),
+          (!taskTypeRequiresRedditUrl(task.taskType) || isValidHttpUrl(task.redditUrl)),
       ) &&
       configuredTasks.every(
         (task) =>

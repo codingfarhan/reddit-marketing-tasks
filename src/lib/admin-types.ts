@@ -30,6 +30,10 @@ export function isAdminTaskType(value: unknown): value is AdminTaskType {
   )
 }
 
+export function taskTypeRequiresRedditUrl(taskType: string) {
+  return taskType !== "change_profile_picture" && taskType !== "change_profile_bio"
+}
+
 export type PersonaSetting = {
   personaId: string
   status: "marketing" | "warmup"

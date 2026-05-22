@@ -1,4 +1,4 @@
-import { emptyAdminConfig, isAdminTaskType, type AdminConfig } from "@/lib/admin-types"
+import { emptyAdminConfig, isAdminTaskType, taskTypeRequiresRedditUrl, type AdminConfig } from "@/lib/admin-types"
 import { prisma } from "@/lib/db"
 import { commentPersonas } from "@/lib/personas"
 
@@ -12,8 +12,8 @@ function formatIstDateInput(date: Date | null | undefined) {
   }).format(date)
 }
 
-function hasTaskContent(task: { redditUrl: string; postText: string; customComment: string }) {
-  return Boolean(task.redditUrl.trim() || task.postText.trim() || task.customComment.trim())
+function hasTaskContent(task: { redditUrl: string; postText: string; customComment: string; taskType: string }) {
+  return Boolean(!taskTypeRequiresRedditUrl(task.taskType) || task.redditUrl.trim() || task.postText.trim() || task.customComment.trim())
 }
 
 export async function readAdminConfig(): Promise<AdminConfig> {
