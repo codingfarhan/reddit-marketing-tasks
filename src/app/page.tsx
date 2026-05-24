@@ -120,6 +120,7 @@ function getScreenshotTaskInstruction(taskType: string) {
   if (taskType === "upvote") return "Upvote this post, then upload a screenshot."
   if (taskType === "join_subreddit") return "Join this subreddit, then upload a screenshot."
   if (taskType === "change_profile_picture") return "Change your Reddit profile picture, then upload a screenshot."
+  if (taskType === "change_banner_image") return "Change your Reddit account banner image, then upload a screenshot."
   if (taskType === "change_profile_bio") return "Change your Reddit profile bio, then upload a screenshot."
   if (taskType === "verify_reddit_email")
     return "Verify the email used for your Reddit account (if you signed up with Google it may already be verified). Then open reddit.com/settings/account, take a screenshot showing your email status, and upload it here."

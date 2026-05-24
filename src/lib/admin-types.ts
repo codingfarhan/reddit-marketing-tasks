@@ -16,6 +16,7 @@ export type AdminTaskType =
   | "upvote"
   | "join_subreddit"
   | "change_profile_picture"
+  | "change_banner_image"
   | "change_profile_bio"
   | "verify_reddit_email"
 
@@ -25,6 +26,7 @@ export function isAdminTaskType(value: unknown): value is AdminTaskType {
     value === "upvote" ||
     value === "join_subreddit" ||
     value === "change_profile_picture" ||
+    value === "change_banner_image" ||
     value === "change_profile_bio" ||
     value === "verify_reddit_email"
   )

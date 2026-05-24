@@ -308,6 +308,7 @@ export default function AdminPage() {
                 <option value="upvote">Upvote this post</option>
                 <option value="join_subreddit">Join a subreddit</option>
                 <option value="change_profile_picture">Change profile picture</option>
+                <option value="change_banner_image">Change banner image</option>
                 <option value="change_profile_bio">Change profile bio</option>
                 <option value="verify_reddit_email">Verify Reddit email</option>
               </select>
@@ -442,6 +443,7 @@ export default function AdminPage() {
                       <option value="upvote">Upvote this post</option>
                       <option value="join_subreddit">Join a subreddit</option>
                       <option value="change_profile_picture">Change profile picture</option>
+                      <option value="change_banner_image">Change banner image</option>
                       <option value="change_profile_bio">Change profile bio</option>
                       <option value="verify_reddit_email">Verify Reddit email</option>
                     </select>
