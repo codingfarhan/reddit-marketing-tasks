@@ -5,8 +5,20 @@ import { readSubmissions, type SavedSubmission } from "@/lib/submissions-db"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
+const istDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+
+function getIstDateKey(date: string | Date) {
+  return istDateFormatter.format(new Date(date))
+}
+
 export default async function SubmissionsPage() {
   const [metas, adminConfig] = await Promise.all([readSubmissions(), readAdminConfig()])
+  const todayDateKey = getIstDateKey(new Date())
   const latestByName = new Map<string, SavedSubmission>()
   for (const meta of metas) {
     const key = meta.personaId || meta.name.toLowerCase()
@@ -14,8 +26,10 @@ export default async function SubmissionsPage() {
     if (!existing || existing.submittedAt < meta.submittedAt) latestByName.set(key, meta)
   }
   const rows = Array.from(latestByName.values()).sort((a, b) => (a.submittedAt < b.submittedAt ? 1 : -1))
-  const submittedPersonaIds = new Set(rows.map((row) => row.personaId))
-  const missingPersonas = commentPersonas.filter((persona) => !submittedPersonaIds.has(persona.id))
+  const submittedTodayPersonaIds = new Set(
+    metas.filter((meta) => getIstDateKey(meta.submittedAt) === todayDateKey).map((meta) => meta.personaId),
+  )
+  const missingPersonas = commentPersonas.filter((persona) => !submittedTodayPersonaIds.has(persona.id))
   const commentUrlCount = rows.reduce((total, meta) => total + (meta.tasks?.length ?? 0), 0)
   const adminColumns = [
     ...adminConfig.tasks.map((task, index) => ({
@@ -50,9 +64,9 @@ export default async function SubmissionsPage() {
         </div>
 
         <div className="mt-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-          <h2 className="text-sm font-semibold">Not submitted yet</h2>
+          <h2 className="text-sm font-semibold">Not submitted today</h2>
           {missingPersonas.length === 0 ? (
-            <p className="mt-2 text-sm text-zinc-600">Everyone has submitted.</p>
+            <p className="mt-2 text-sm text-zinc-600">Everyone has submitted today.</p>
           ) : (
             <div className="mt-3 flex flex-wrap gap-2">
               {missingPersonas.map((persona) => (

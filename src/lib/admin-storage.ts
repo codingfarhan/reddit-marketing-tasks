@@ -2,6 +2,8 @@ import { emptyAdminConfig, isAdminTaskType, taskTypeRequiresRedditUrl, type Admi
 import { prisma } from "@/lib/db"
 import { commentPersonas } from "@/lib/personas"
 
+const activePersonaIds = new Set(commentPersonas.map((persona) => persona.id))
+
 function formatIstDateInput(date: Date | null | undefined) {
   if (!date) return ""
   return new Intl.DateTimeFormat("en-CA", {
@@ -53,12 +55,15 @@ export async function readAdminConfig(): Promise<AdminConfig> {
     .map((task) => ({
       taskId: task.id,
       redditUrl: task.redditUrl,
-      comments: task.generatedComments.map((comment) => ({
-        personaId: comment.personaId,
-        name: comment.personaName,
-        comment: comment.comment,
-      })),
+      comments: task.generatedComments
+        .filter((comment) => activePersonaIds.has(comment.personaId))
+        .map((comment) => ({
+          personaId: comment.personaId,
+          name: comment.personaName,
+          comment: comment.comment,
+        })),
     }))
+    .filter((task) => task.comments.length > 0)
 
   return {
     tasks: tasks.filter((task) => task.taskCategory !== "warmup").map((task) => ({
@@ -120,12 +125,14 @@ export async function writeAdminConfig(config: AdminConfig) {
     ),
   ]
   const commentRows = config.generatedTaskComments.flatMap((task) =>
-    task.comments.map((comment) => ({
-      taskId: task.taskId,
-      personaId: comment.personaId,
-      personaName: comment.name,
-      comment: comment.comment,
-    })),
+    task.comments
+      .filter((comment) => activePersonaIds.has(comment.personaId))
+      .map((comment) => ({
+        taskId: task.taskId,
+        personaId: comment.personaId,
+        personaName: comment.name,
+        comment: comment.comment,
+      })),
   )
 
   const existingTasks = await prisma.adminTask.findMany({
