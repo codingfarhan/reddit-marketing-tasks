@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { isAdminTaskType, taskTypeRequiresRedditUrl, type AdminConfig, type AdminRedditTask, type PersonaSetting } from "@/lib/admin-types"
-import { getShuffledMarketingTasks, getTaskGroup } from "@/lib/persona-groups"
+import { getPersonasForMarketingTask, getShuffledMarketingTasks, MAX_PERSONAS_PER_MARKETING_TASK } from "@/lib/persona-groups"
 import { commentPersonas } from "@/lib/personas"
 
 type Status = {
@@ -258,7 +258,7 @@ export default function AdminPage() {
                 <h2 className="text-sm font-semibold">
                   Task {index + 1}{" "}
                   <span className="text-zinc-500">
-                    • {getTaskGroup(shuffledMarketingTaskIds.indexOf(task.id), tasks.length) === "group_1" ? "Group 1" : "Group 2"}
+                    • {getPersonasForMarketingTask(shuffledMarketingTaskIds.indexOf(task.id), personaSettings).length} of {MAX_PERSONAS_PER_MARKETING_TASK} personas
                   </span>
                 </h2>
                 <div className="flex items-center gap-3">
