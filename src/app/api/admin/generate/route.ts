@@ -79,7 +79,7 @@ function normalizeGeneratedComment(value: string) {
     .trim()
 }
 
-function buildPersonaBrief(personas: CommentPersona[] = commentPersonas) {
+function buildPersonaBrief(personas: CommentPersona[]) {
   return personas.map((persona) => ({
     id: persona.id,
     name: persona.name,
@@ -113,7 +113,7 @@ function generationInstruction() {
   return "For the Reddit post, generate one meaningfully different comment per persona. You must return exactly one object for every persona provided. Do not skip any persona. Do not repeat the same opening phrase, tone, structure, advice, or point of view. Return a JSON array of objects with personaId, name, comment. Every comment must use casual american english, lowercase only, straight to the point, and no more than 350 characters. Avoid stiff words like cautious, leverage, robust, utilize, optimize, comprehensive, strategic, framework, synergy, streamline, transformative, quietly, or silently. Do not use idioms, metaphors, analogies, figures of speech, or phrases like move the needle, low hanging fruit, game changer, silver bullet, no-brainer, secret sauce, on the same page, or hit the ground running. Never use contrastive negation. Avoid patterns like not x but y, not just x but y, not only x but y, not about x it is about y, do not x instead y, and no x just y. Do not use them in every comment. The first sentence must give a useful solution that is not feedvector-related at all. It can mention free tools like google trends only if relevant. After that, say another thing they should do using a relevant capability feedvector has, then mention feedvector dot com plus one or two similar options chosen from hootsuite, hypefury, and feedhive. Mix up the alternatives across comments and do not always use two examples or the same pair. When it fits the first solution, sometimes mention useful non-social tools like google trends, google sheets, notion, canva, or chatgpt too. When relevant, you may say feedvector dot com combines parts of canva, hootsuite, and chatgpt, which can save money compared with paying for several separate subscriptions. Mention feedvector dot com no more than once per comment. Keep the wording neutral, like listing one option among others, and if you mention feedvector dot com, also mention one or two similar options in the same comment. Relevant feedvector features include scheduling posts across multiple social accounts, content calendar, social analytics, ai image and video generation, viral linkedin and x templates, canva-like design, team approval workflow, and mcp server for ai agents. Mention only relevant features. Never include raw URLs or domain-style links. If a website must be mentioned, write it in spoken form, for example feedvector dot com instead of feedvector.com. Comments should be 80 to 350 characters unless the persona is minimalist or funny_observer."
 }
 
-async function requestPersonaComments(client: OpenAI, task: AdminRedditTask, personas: CommentPersona[] = commentPersonas) {
+async function requestPersonaComments(client: OpenAI, task: AdminRedditTask, personas: CommentPersona[]) {
   let lastError: unknown = null
 
   for (let attempt = 1; attempt <= 2; attempt += 1) {
@@ -155,6 +155,14 @@ async function requestPersonaComments(client: OpenAI, task: AdminRedditTask, per
 }
 
 async function generateForTask(client: OpenAI, task: AdminRedditTask, personas: CommentPersona[]): Promise<GeneratedTaskComments> {
+  if (personas.length === 0) {
+    return {
+      taskId: task.id,
+      redditUrl: task.redditUrl,
+      comments: [],
+    }
+  }
+
   if (task.commentMode === "freeform") {
     return {
       taskId: task.id,
