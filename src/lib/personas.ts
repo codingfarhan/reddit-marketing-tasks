@@ -35,6 +35,7 @@ export type ResponsePattern =
 export type CommentPersona = {
   id: string
   name: string
+  bannedSubreddits?: string[]
   archetype: CommentArchetype
   responsePattern: ResponsePattern
   tone: string
@@ -66,6 +67,7 @@ const additionalPersonaProfiles: CommentPersona[] = [
   {
     id: "persona_17",
     name: "Ifra Fatima",
+    bannedSubreddits: ["r/cats", "r/SaaS", "r/NewToReddit", "r/painting", "r/MadeMeSmile"],
     archetype: "supportive_friend",
     responsePattern: "encourage_author",
     tone: "warm and calm",

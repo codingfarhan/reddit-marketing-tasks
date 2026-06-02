@@ -258,7 +258,7 @@ export default function AdminPage() {
                 <h2 className="text-sm font-semibold">
                   Task {index + 1}{" "}
                   <span className="text-zinc-500">
-                    • {getPersonasForMarketingTask(shuffledMarketingTaskIds.indexOf(task.id), personaSettings).length} of {MAX_PERSONAS_PER_MARKETING_TASK} personas
+                    • {getPersonasForMarketingTask(task, shuffledMarketingTaskIds.indexOf(task.id), personaSettings).length} of {MAX_PERSONAS_PER_MARKETING_TASK} personas
                   </span>
                 </h2>
                 <div className="flex items-center gap-3">

@@ -232,7 +232,7 @@ export async function POST() {
     const marketingCommentTasks = shuffledMarketingTasks
       .map((task, index) => ({
         task,
-        personas: getPersonasForMarketingTask(index, config.personaSettings),
+        personas: getPersonasForMarketingTask(task, index, config.personaSettings),
       }))
       .filter(({ task, personas }) => task.taskType === "comment" && task.commentMode !== "freeform" && personas.length > 0)
     const warmupCommentTasks = config.warmupTasks
