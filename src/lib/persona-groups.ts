@@ -1,7 +1,7 @@
 import type { AdminRedditTask, PersonaSetting } from "@/lib/admin-types"
 import { commentPersonas } from "@/lib/personas"
 
-export const MAX_PERSONAS_PER_MARKETING_TASK = 4
+export const MAX_PERSONAS_PER_MARKETING_TASK = 1
 
 function stableHash(value: string) {
   let hash = 0
